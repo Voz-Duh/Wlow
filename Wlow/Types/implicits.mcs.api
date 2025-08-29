@@ -21,6 +21,7 @@
     'streval('code)
     if (generic_frendly){
       'if(GenericMeta, return val;)
+      'if(GenericLinkMeta, return ImplicitCast(sc, info, val, type.CurrentType, generic_frendly);)
     }
     throw new($"{info} type 'name cannot be implicitly casted to {to.Name(sc)}");
   }
@@ -29,6 +30,7 @@
   {
     'streval('code)
     'if(GenericMeta, return this;)
+    'if(GenericLinkMeta, return ImplicitCast(sc, info, type.CurrentType);)
     throw new($"{info} type 'name cannot be implicitly casted to {to.Name(sc)}");
   }
 )

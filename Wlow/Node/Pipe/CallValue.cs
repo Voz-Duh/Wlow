@@ -28,7 +28,7 @@ public readonly record struct CallValue(Info info, IValue value, IValue[] args) 
         if (func.function == null)
             throw new($"{value.info} trying to call {func.type.Name(sc)}");
 
-        var res = func.function.Call(sc, [.. args.Select(v => v.Compile(sc))]);
+        var res = func.function.Call(sc, info, [.. args.Select(v => v.Compile(sc))]);
         if (linkMeta.CurrentType is GenericMeta)
             return res;
         return new(linkMeta.CurrentType, res.type.ImplicitCast(sc, info, res.Get(sc), linkMeta.CurrentType, false));

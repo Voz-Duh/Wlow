@@ -5,6 +5,11 @@ using LLVMSharp.Interop;
 namespace Wlow.Types;
 
 public partial class VoidMeta {
-  ~define('body:)
+  ~define('body:
+    'if(VoidMeta,
+      'on(type, return to;)
+      'on(cast, return val;)
+    )
+  )
   'implicits(body, void)
 }

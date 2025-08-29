@@ -1,5 +1,5 @@
-using LLVMSharp;
 using LLVMSharp.Interop;
+using Wlow.Types;
 
 namespace Wlow;
 
@@ -13,8 +13,8 @@ public readonly record struct LLVMValue(
 {
     public LLVMValueRef Get(Scope sc)
     {
-        if (is_jump)
-            throw new($"{info} value is cannot be loop");
+        if (is_jump || type is VoidMeta)
+            throw new($"{info} value type is cannot be void");
         if (link != null)
             return sc.bi.BuildLoad2(type.Type(sc), (LLVMValueRef)link);
         return val;

@@ -684,6 +684,11 @@ class Program
         */
 
         RunProgram(
+            "Infinity",
+            @"('a |> a' a)=b |> b' b",
+            log_llvm: true
+        );
+        RunProgram(
             "Iterate",
             @"0=i |> i==10 ?> (i) :> i+1=i |> i"
         );

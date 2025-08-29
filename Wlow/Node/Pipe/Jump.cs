@@ -10,7 +10,16 @@ public readonly record struct Jump(Info info, string name) : IValue
     public LLVMValue Compile(Scope sc)
     {
         bool has = sc.GetVariable(name, out Variable variable);
-        if (!has)
+
+        if (has)
+        {
+            if (!variable.flags.HasFlag(VariableFlags.Jumpable))
+            {
+                throw new($"{info} cannot jump to {name} from that scope");
+            }
+            sc.bi.BuildBr(variable.block);
+        }
+        else
         {
             var block = sc.Block();
             variable = new(
@@ -24,11 +33,8 @@ public readonly record struct Jump(Info info, string name) : IValue
             sc.bi.BuildBr(block);
             sc.bi.PositionAtEnd(block);
         }
-        else
+        unsafe
         {
-            sc.bi.BuildBr(variable.block);
-        }
-        unsafe {
             return new(VoidMeta.Get, is_jump: true);
         }
     }

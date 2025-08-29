@@ -11,10 +11,8 @@ public partial class GenericLinkMeta {
       return this;
     )
     'on(cast,
-      if (!generic_frendly) {
-        return val;
-      }
+      return this.CurrentType.ImplicitCast(sc, info, val, to, generic_frendly);
     )
   )
-  'implicits(body, generic)
+  'implicits(body, generic link)
 }

@@ -1,5 +1,6 @@
 
 using System.Numerics;
+using System.Text;
 using LLVMSharp.Interop;
 using Wlow.Types;
 
@@ -16,7 +17,12 @@ public class FunctionDecl(
 {
     [ThreadStatic]
     private static Dictionary<(BigInteger, string), FunctionDefinition> ResolvingStackValue;
-    private static Dictionary<(BigInteger, string), FunctionDefinition> ResolvingStack => ResolvingStackValue ??= new();
+    private static Dictionary<(BigInteger, string), FunctionDefinition> ResolvingStack => ResolvingStackValue ??= [];
+    
+    [ThreadStatic]
+    private static Stack<Info> CallingStackValue;
+    private static Stack<Info> CallingStack => CallingStackValue ??= [];
+
     private static BigInteger UniqueNumberGenerator = 0;
     public readonly BigInteger UniqueNumber = unique_number ?? UniqueNumberGenerator++;
 
@@ -26,6 +32,9 @@ public class FunctionDecl(
     public readonly IValue block = block;
 
     private readonly Dictionary<string, FunctionDefinition> Definitions = definitions ?? [];
+
+    private static string CallingStackedMessage(string message)
+        => string.Join("\n", [message, .. CallingStack.Select(v => $"from {v}"), $"at {message}"]);
 
     public LLVMValue CastTo(Scope sc, Info info, FunctionMeta to)
     {
@@ -101,12 +110,12 @@ public class FunctionDecl(
                 }),
             ];
 
-        var (result_type, _, _) = CreateDefinition(sc, arg_types, type_only: true);
+        var (result_type, _, _) = CreateDefinition(sc, info, arg_types, type_only: true);
 
         return result_type;
     }
 
-    public LLVMValue Call(Scope sc, LLVMValue[] args)
+    public LLVMValue Call(Scope sc, Info info, LLVMValue[] args)
     {
         if (args.Length != arguments.Count)
             throw new($"{info} called function waiting for {arguments.Count} but {args.Length} is passed");
@@ -141,98 +150,109 @@ public class FunctionDecl(
             return new(definition.type.result, val: sc.bi.BuildCall2(definition.llvm_type, definition.llvm_value, call_args));
         }
 
-        var (result_type, llvm_func_type, llvm_func) = CreateDefinition(sc, arg_types, type_only: false);
+        var (result_type, llvm_func_type, llvm_func) = CreateDefinition(sc, info, arg_types, type_only: false);
 
         return new(result_type.result, val: sc.bi.BuildCall2(llvm_func_type, llvm_func, call_args));
     }
 
-    private FunctionDefinition CreateDefinition(Scope base_scope, IMetaType[] args, bool type_only)
+    private FunctionDefinition CreateDefinition(Scope base_scope, Info info, IMetaType[] args, bool type_only)
     {
-        var i = 0u;
-        var real_args =
-            new Dictionary<string, IMetaType>([
-                .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
-            ]);
-
-        var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
-        var resolve_bin = resolve_type.AsBin();
-
-        if (Definitions.TryGetValue(resolve_bin, out var defined) && defined.llvm_type.Handle != 0)
-            return defined;
-
-        ResolvingStack[(UniqueNumber, resolve_bin)] = default;
-
-        i = 0u;
-        var type_scope = new Scope(
-            variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
-            ctx: base_scope.ctx,
-            bi: default,
-            mod: base_scope.mod,
-            fn: default
-        );
-
-        i = 0u;
-        var resolved_args = (IMetaType[])[.. SelectFunctionsResolved(args)];
-
-        Definitions[resolve_bin] = new(resolve_type, default, default);
-
-        var result_type = this.block.Type(type_scope);
-
-        if (result_type is GenericMeta)
-            throw new($"{info} ambiguity return type in function body, try to explicit some types");
-
-        var func_type = new FunctionMeta(
-            resolved_args,
-            result_type,
-            declaration: this
-        );
-
-        if (type_only)
-        {
-            ResolvingStack.Remove((UniqueNumber, resolve_bin));
-            return new(func_type, default, default);
-        }
-
-        var llvm_func_type = func_type.LLVMBaseType(base_scope);
-
-        var func = base_scope.CreateFunction(llvm_func_type);
-
-        var result = new FunctionDefinition(func_type, llvm_func_type, func);
-
-        ResolvingStack[(UniqueNumber, resolve_bin)] = result;
-
-        LLVMBasicBlockRef entry = func.AppendBasicBlock("entry");
-
-        using var bi = base_scope.ctx.CreateBuilder();
-        bi.PositionAtEnd(entry);
-
-        i = 0u;
-        var scope = new Scope(
-            new(
-                [
-                    .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
-                ]
-            ),
-            ctx: base_scope.ctx,
-            bi: bi,
-            mod: base_scope.mod,
-            fn: func
-        );
-
-        var ret = this.block.Compile(scope);
         try
         {
-            bi.BuildRet(ret.Get(scope));
+            var i = 0u;
+            var real_args =
+                new Dictionary<string, IMetaType>([
+                    .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
+                ]);
+
+            var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
+            var resolve_bin = resolve_type.AsBin();
+
+            if (Definitions.TryGetValue(resolve_bin, out var defined) && defined.llvm_type.Handle != 0)
+                return defined;
+
+            ResolvingStack[(UniqueNumber, resolve_bin)] = default;
+
+            i = 0u;
+            var type_scope = new Scope(
+                variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
+                ctx: base_scope.ctx,
+                bi: default,
+                mod: base_scope.mod,
+                fn: default
+            );
+
+            i = 0u;
+            var resolved_args = (IMetaType[])[.. SelectFunctionsResolved(args)];
+
+            Definitions[resolve_bin] = new(resolve_type, default, default);
+
+            CallingStack.Push(info);
+            var result_type = this.block.Type(type_scope);
+            CallingStack.Pop();
+
+            if (result_type is GenericLinkMeta meta && meta.CurrentType is GenericMeta)
+                meta.CurrentType = VoidMeta.Get;
+
+            CallingStack.Push(info);
+            var func_type = new FunctionMeta(
+                resolved_args,
+                result_type,
+                declaration: this
+            );
+
+            if (type_only)
+            {
+                ResolvingStack.Remove((UniqueNumber, resolve_bin));
+                return new(func_type, default, default);
+            }
+
+            var llvm_func_type = func_type.LLVMBaseType(base_scope);
+
+            var func = base_scope.CreateFunction(llvm_func_type);
+
+            var result = new FunctionDefinition(func_type, llvm_func_type, func);
+
+            ResolvingStack[(UniqueNumber, resolve_bin)] = result;
+
+            LLVMBasicBlockRef entry = func.AppendBasicBlock("entry");
+
+            using var bi = base_scope.ctx.CreateBuilder();
+            bi.PositionAtEnd(entry);
+
+            i = 0u;
+            var scope = new Scope(
+                new(
+                    [
+                        .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
+                    ]
+                ),
+                ctx: base_scope.ctx,
+                bi: bi,
+                mod: base_scope.mod,
+                fn: func
+            );
+
+            var ret = this.block.Compile(scope);
+            try
+            {
+                bi.BuildRet(ret.Get(scope));
+            }
+            catch
+            {
+                bi.BuildRetVoid();
+            }
+
+            Definitions[resolve_bin] = result;
+
+            CallingStack.Pop();
+            ResolvingStack.Remove((UniqueNumber, resolve_bin));
+            return result;
         }
-        catch
+        catch (Exception e)
         {
-            bi.BuildRetVoid();
+            throw new(CallingStackedMessage(e.Message), e);
         }
-
-        Definitions[resolve_bin] = result;
-
-        ResolvingStack.Remove((UniqueNumber, resolve_bin));
-        return result;
     }
 
     private static IEnumerable<TResult> SelectIf<TSource, TResult>(IEnumerable<TSource> source, Func<TSource, (bool, TResult)> selector)
