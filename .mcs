@@ -1,0 +1,9 @@
+
+--- include all from Macro
+~include "Macro"
+
+--- will work at Wlow project
+~workpath "Wlow"
+
+--- result is .cs files
+~result ".cs"

@@ -1,0 +1,17 @@
+~include(Api/operator.mcs.api)
+~include(Api/comp.mcs.api)
+
+using LLVMSharp.Interop;
+using Wlow.Types;
+using Wlow;
+
+namespace Wlow.Node;
+
+public readonly partial record struct GreaterEqualsValue {
+  ~define('isuf():Int)
+  ~define('isufo():Int)
+  ~define('iop:BuildICmp)
+  ~define('udo:UGE)
+  ~define('ido:SGE)
+  'operator_infix(comp, greater or equals)
+}

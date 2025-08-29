@@ -1,0 +1,19 @@
+~include(implicits.mcs.api)
+
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public partial class GenericMeta {
+  ~define('body:
+    'on(type,
+      return to;
+    )
+    'on(cast,
+      if (!generic_frendly) {
+        return val;
+      }
+    )
+  )
+  'implicits(body, generic)
+}

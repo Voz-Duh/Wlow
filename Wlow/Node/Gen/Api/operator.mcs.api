@@ -1,0 +1,45 @@
+
+~define('on(region, body):
+  ~ifeq('region:'__region)
+    'body
+  ~endif
+)
+
+~define('if(left, right, body):
+  {
+    if (a_raw_ty is 'left  a_ty
+     && b_raw_ty is 'right b_ty)
+    {
+      'body
+    }
+  }
+)
+
+~define('operator_infix(code, name):
+  ~define('__region:type)
+  public IMetaType Type(Scope sc)
+  {
+    var a_raw_ty = left.Type(sc);
+    var b_raw_ty = right.Type(sc);
+
+    'streval('code)
+
+    throw new Exception($"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+  }
+
+  ~define('__region:base)
+  public LLVMValue Compile(Scope sc)
+  {
+    var a_raw_ty = left.Type(sc);
+    var a_lty = a_raw_ty.Type(sc);
+    var a = left.Compile(sc).Get(sc);
+
+    var b_raw_ty = right.Type(sc);
+    var b_lty = b_raw_ty.Type(sc);
+    var b = right.Compile(sc).Get(sc);
+
+    'streval('code)
+
+    throw new Exception($"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+  }
+)

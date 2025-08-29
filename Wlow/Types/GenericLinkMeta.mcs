@@ -1,0 +1,20 @@
+~include(implicits.mcs.api)
+
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public partial class GenericLinkMeta {
+  ~define('body:
+    'on(type,
+      this.CurrentType = this.CurrentType.ImplicitCast(sc, info, to);
+      return this;
+    )
+    'on(cast,
+      if (!generic_frendly) {
+        return val;
+      }
+    )
+  )
+  'implicits(body, generic)
+}

@@ -1,0 +1,17 @@
+~include(Api/operator.mcs.api)
+~include(Api/comp.mcs.api)
+
+using LLVMSharp.Interop;
+using Wlow.Types;
+using Wlow;
+
+namespace Wlow.Node;
+
+public readonly partial record struct EqualsValue {
+  ~define('isuf():Int)
+  ~define('isufo():Int)
+  ~define('iop:BuildICmp)
+  ~define('udo:EQ)
+  ~define('ido:EQ)
+  'operator_infix(comp, equals)
+}

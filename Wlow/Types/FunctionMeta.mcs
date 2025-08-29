@@ -1,0 +1,19 @@
+~include(implicits.mcs.api)
+
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public readonly partial struct FunctionMeta {
+  ~define('body:
+    'if(FunctionMeta,
+      'on(type,
+        return Declaration.CastTo(sc, info, type).type;
+      )
+      'on(cast,
+        return Declaration.CastTo(sc, info, type).val;
+      )
+    )
+  )
+  'implicits(body, {Name(sc)})
+}

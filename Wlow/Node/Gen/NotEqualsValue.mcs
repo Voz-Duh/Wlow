@@ -1,0 +1,17 @@
+~include(Api/operator.mcs.api)
+~include(Api/comp.mcs.api)
+
+using LLVMSharp.Interop;
+using Wlow.Types;
+using Wlow;
+
+namespace Wlow.Node;
+
+public readonly partial record struct NotEqualsValue {
+  ~define('isuf():Int)
+  ~define('isufo():Int)
+  ~define('iop:BuildICmp)
+  ~define('udo:NE)
+  ~define('ido:NE)
+  'operator_infix(comp, not equals)
+}

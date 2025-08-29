@@ -1,0 +1,86 @@
+
+--- 'streval can be used to evaluate macro with string inside as not stringed
+~define('streval(macro):~defeval('__streval(macro):''macro)~defeval('__streval(macro):'__streval('macro))'__streval('macro))
+
+--- use to expand macroses or concatenate strings
+~define('c(x):'x)
+
+--- 'define macro can be used to define macro with dynamic name
+~define('__define(name, args, body):~(~define(')~'name'args~(:)~'body~())~)
+~define('define(name, args, body):'streval(__define('name,'args,'body)))
+
+--- 'pass macro can be used to define macro that will be passed immediately
+~define('pass(body):'streval(__define(__pass,,'body))__pass)
+
+--- better ~ifeq which is already exists
+~define('ifeq(a, b, then, else):
+  ~ifeq('a:'b)
+  'then
+  ~else
+  ~ifneq('else:)
+  'else
+  ~endif
+  ~endif
+)
+
+--- better ~ifneq which is already exists
+~define('ifneq(a, b, then, else):
+  ~ifneq('a:'b)
+  'then
+  ~endif
+  ~ifneq('else:)
+  ~ifeq('a:'b)
+  'else
+  ~endif
+  ~endif
+)
+
+--- not any a in 'b(x) then code
+--- used in 'once
+~define('nany(x, a, b, code):
+  ~defeval('y:'c(''b('x)))
+  ~defeval('y:'y)
+~if('x)
+  ~ifneq(('a):('y))
+    ~define('loop(x, a, b, c):'nany('x, 'a, 'b, 'c))
+  ~else
+    ~define('loop(x, a, b, c):)
+  ~endif
+~else
+  'c(''code)
+  ~define('loop(x, a, b, c):)
+~endif
+  'loop(~eval('x-1), 'a, 'b, 'code)
+)
+
+--- can be used to allow include once, but A LOT comfortable
+~define('once:
+  --- clear once flag
+  ~defeval('can:0)
+  ~ifndef(API__once)
+    --- set API__once to 1 if there's no API__once
+    ~defeval('API__once:1)
+    --- define that we passed the check
+    ~defeval('can:1)
+  ~else
+    --- otherwise - check if there's no any other __once with that filepath
+    --- method to compute the right value of "not any"
+    ~define('__check(x): ~eval(''c(__once)'c('x)))
+    --- pass-code - macrosed to not be evaluated immediately
+    ~define('__pass:
+      --- define that we passed the check
+      ~defeval('can:1)
+    )
+    --- check for not any ~file in __once*
+    'nany('API__once, ~file, __check,__pass)
+  ~endif
+  
+  --- only if check is passed
+  ~if('can)
+    --- define macro __once with API__once number with 
+    'define(__once'API__once,,~eval(~file))
+    --- add 1 to API__once
+    ~defeval('API__once:~eval('API__once+1))
+  ~endif
+  'can
+)

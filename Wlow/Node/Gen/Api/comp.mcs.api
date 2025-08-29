@@ -1,0 +1,30 @@
+
+~define('comp:
+  --- LLVMType a_raw_ty
+  --- MetaType a_meta
+  --- LLVMTypeRef a_lty
+  --- LLVMValueRef a
+  --- LLVMType b_raw_ty
+  --- MetaType b_meta
+  --- LLVMTypeRef b_lty
+  --- LLVMValueRef b
+  
+  'on(type, return BoolMeta.Get;)
+
+  'on(base,
+    ~define('bool_cmp: 'if(BoolMeta, BoolMeta, return new(BoolMeta.Get, sc.bi.'iop (LLVM'isuf()Predicate.LLVM'isufo()'ido, a, b));))
+    ~ifeq('ido:EQ)
+      'bool_cmp
+    ~endif
+    ~ifeq('ido:NE)
+      'bool_cmp
+    ~endif
+    'if(IntMeta, IntMeta,
+      return new(BoolMeta.Get, sc.bi.'iop (LLVM'isuf()Predicate.LLVM'isufo()'ido, a, b));
+    )
+    --- for floating LLVMRealPredicate.LLVMRealOEQ
+    --- ~define('isuf():Real);
+    --- ~define('isufo():RealO);
+    --- ~define('iop:BuildFCmp);
+  )
+)

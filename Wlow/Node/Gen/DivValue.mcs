@@ -1,0 +1,13 @@
+~include(Api/operator.mcs.api)
+~include(Api/arith.mcs.api)
+
+using LLVMSharp.Interop;
+using Wlow.Types;
+
+namespace Wlow.Node;
+
+public readonly partial record struct DivValue {
+  ~define('iop:BuildSDiv)
+  ~define('icast(v, ty):BuildIntCast2('v, 'ty, true))
+  'operator_infix(arith, division)
+}

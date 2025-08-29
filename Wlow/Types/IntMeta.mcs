@@ -1,0 +1,21 @@
+~include(implicits.mcs.api)
+
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public readonly partial record struct IntMeta {
+  ~define('body:
+    'if(IntMeta,
+      'on(type,
+        if (type.bytes >= this.bytes)
+          return to;
+      )
+      'on(cast,
+        if (type.bytes >= this.bytes)
+          return sc.bi.BuildIntCast2(val, to.Type(sc), true);
+      )
+    )
+  )
+  'implicits(body, i{bytes})
+}

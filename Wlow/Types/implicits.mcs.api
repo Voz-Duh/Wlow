@@ -1,0 +1,34 @@
+
+~define('on(region, body):
+  ~ifeq('region:'__region)
+    'body
+  ~endif
+)
+
+~define('if(type, body):
+  {
+    if (to is 'type type)
+    {
+      'body
+    }
+  }
+)
+
+~define('implicits(code, name):
+  ~define('__region:cast)
+  public LLVMValueRef ImplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to, bool generic_frendly)
+  {
+    'streval('code)
+    if (generic_frendly){
+      'if(GenericMeta, return val;)
+    }
+    throw new($"{info} type 'name cannot be implicitly casted to {to.Name(sc)}");
+  }
+  ~define('__region:type)
+  public IMetaType ImplicitCast(Scope sc, Info info, IMetaType to)
+  {
+    'streval('code)
+    'if(GenericMeta, return this;)
+    throw new($"{info} type 'name cannot be implicitly casted to {to.Name(sc)}");
+  }
+)

@@ -1,0 +1,30 @@
+
+~define('arith:
+  --- LLVMType a_raw_ty
+  --- MetaType a_meta
+  --- LLVMTypeRef a_lty
+  --- LLVMValueRef a
+  
+  --- LLVMType b_raw_ty
+  --- MetaType b_meta
+  --- LLVMTypeRef b_lty
+  --- LLVMValueRef b
+  
+  'if(IntMeta, IntMeta,
+    var is_a = a_ty.bytes > b_ty.bytes;
+    var to = is_a ? a_raw_ty : b_raw_ty;
+    'on(type,
+      return to;
+    )
+    'on(base,
+      var to_llvm = is_a ? a_lty : b_lty;
+      return new(
+        to,
+        sc.bi.'iop (
+          sc.bi.'icast(a, to_llvm),
+          sc.bi.'icast(b, to_llvm)
+        )
+      );
+    )
+  )
+)

@@ -1,0 +1,14 @@
+# remove generated files
+*.mcs.cs
+
+# remove binary
+*/bin
+*/obj
+
+# remove LLVM binary
+# maybe make it on
+#libLLVM.dll
+
+# remove IDE specific
+.idea
+.vscode
