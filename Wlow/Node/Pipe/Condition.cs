@@ -14,13 +14,13 @@ public readonly record struct Condition(Info info, IValue cond, IValue then, IVa
         var a_ty = then.Type(sc);
         var b_ty = other.Type(sc);
 
-        if (a_ty is VoidMeta && b_ty is VoidMeta)
+        if (a_ty.Is<VoidMeta>() && b_ty.Is<VoidMeta>())
             return VoidMeta.Get;
 
-        if (a_ty is VoidMeta)
+        if (a_ty.Is<VoidMeta>())
             return b_ty;
 
-        if (b_ty is VoidMeta)
+        if (b_ty.Is<VoidMeta>())
             return a_ty;
 
         try

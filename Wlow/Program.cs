@@ -18,6 +18,7 @@ public enum TokenType
     Set,
     Function,
     Comma,
+    Cast,
     If,
     Else,
     Cascade,
@@ -42,7 +43,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
     public override string ToString() => $"({info}: {type} {value ?? inner.FmtString()})";
 
 
-    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(\?>)|(\:>)|(\|\|>)|(\|>)|-?(\d+)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n\r?)|([\t ]+)|(.)", RegexOptions.Multiline)]
+    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|-?(\d+)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
     private static partial Regex Regex();
     private readonly static Regex regex = Regex();
 
@@ -78,13 +79,13 @@ public readonly partial record struct Token(Info info, TokenType type, string va
                     var inner = tokens;
                     if (!stack.TryPop(out (List<Token> body, Info info) back))
                     {
-                        throw new Exception($"{info} unexpected brace end ')'");
+                        throw new CompileException(info, $"unexpected brace end ')'");
                     }
                     tokens = back.body;
-                    tokens.Add(new(info, TokenType.Bracket, inner: [.. inner]));
+                    tokens.Add(new(back.info, TokenType.Bracket, inner: [.. inner]));
                     continue;
                 case TokenType.Newline:
-                    linestart = start;
+                    linestart = start + m.Length;
                     line++;
                     continue;
             }
@@ -92,7 +93,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         }
         if (stack.TryPop(out (List<Token> body, Info info) check))
         {
-            throw new Exception($"{check.info} brace is not closed '('");
+            throw new CompileException(check.info, $"brace is not closed '('");
         }
         return [.. tokens];
     }
@@ -283,8 +284,11 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 
 class Program
 {
-    static (IMetaType type, int offset) ASTType(Token ctx, ReadOnlySpan<Token> inner)
+    static (IMetaType type, int offset) ASTType(Token ctx, ReadOnlySpan<Token> inner, bool throw_errors=false)
     {
+        if (throw_errors && inner.Length == 0)
+            throw new CompileException(ctx.info, "type is cannot be empty");
+
         var first = inner[0];
 
         return first.type switch
@@ -295,9 +299,9 @@ class Program
             TokenType.Int64 => (new IntMeta(64, BinaryType.Int64), 1),
             TokenType.Function =>
                 inner.Length < 2
-                    ? throw new($"{first.info} function type must have arguments, ex.: '(args) return")
+                    ? throw new CompileException(first.info, "function type must have arguments, ex.: '(args) optional return")
                 : inner[1].type != TokenType.Bracket
-                    ? throw new($"{first.info} function type must have arguments, ex.: '(args) return")
+                    ? throw new CompileException(first.info, "function type must have arguments, ex.: '(args) optional return")
                 : ((Func<ReadOnlySpan<Token>, (IMetaType, int)>)((inner) =>
                     {
                         var args =
@@ -305,11 +309,11 @@ class Program
                                 (ctx, inner) =>
                                 {
                                     if (inner.Length == 0)
-                                        throw new($"{ctx.info} function type cannot have empty arguments");
+                                        throw new CompileException(ctx.info, "function type cannot have empty arguments");
 
                                     var (typ, j) = ASTType(ctx, inner);
                                     if (j != inner.Length)
-                                        throw new($"{inner[0].info} function type cannot have named arguments");
+                                        throw new CompileException(inner[0].info, "function type cannot have named arguments");
  
                                     return typ;
                                 });
@@ -319,18 +323,21 @@ class Program
 
                         return (new FunctionMeta(args, type), 2 + i);
                     }))(inner),
-            _ => (VoidMeta.Get, 0)
+            _ =>
+                throw_errors
+                ? throw new CompileException(first.info, "invalid type identifier")
+                : (VoidMeta.Get, 0)
         };
     }
 
     static (IMetaType typ, string name) ASTArgument(Token ctx, ReadOnlySpan<Token> inner)
     {
         if (inner.Length == 0)
-            throw new($"{ctx.info} argument is cannot be empty");
+            throw new CompileException(ctx.info, $"argument is cannot be empty");
 
         if (inner.Length == 1 && inner[0].type == TokenType.Bracket)
             // TODO tuple-destructed arguments
-            throw new($"{ctx.info} tuple-destructed argument is not supported yet");
+            throw new CompileException(ctx.info, $"tuple-destructed argument is not supported yet");
 
         if (inner.Length == 1 && inner[0].type == TokenType.Identifier)
             return (GenericMeta.Get, inner[0].value);
@@ -338,17 +345,17 @@ class Program
         var (type, i) = ASTType(ctx, inner);
 
         if (i >= inner.Length)
-            throw new($"{inner[^1].info} argument name expected after type");
+            throw new CompileException(inner[^1].info, $"argument name expected after type");
         if (i + 1 < inner.Length)
-            throw new($"{inner[i + 1].info} argument name must be last, did you miss comma?");
+            throw new CompileException(inner[i + 1].info, $"argument name must be last, did you miss comma?");
 
         var name = inner[i];
         if (name.type != TokenType.Identifier)
-            throw new($"{inner[i].info} argument name must be an identifier");
+            throw new CompileException(inner[i].info, $"argument name must be an identifier");
 
         return (type, name.value);
     }
-    static IValue ASTFunction(Token ctx, ReadOnlySpan<Token> inner)
+    static FunctionValue ASTFunction(Token ctx, ReadOnlySpan<Token> inner)
     {
         Dictionary<string, IMetaType> args = null;
         IValue body = null;
@@ -372,7 +379,7 @@ class Program
             split_count: 1);
 
         if (body == null)
-            throw new($"{(inner.IsEmpty ? ctx.info : inner[^1].info)} function body is missed, ex.: 'arg1, arg2, ..., argn |> body");
+            throw new CompileException(inner.IsEmpty ? ctx.info : inner[^1].info, $"function body is missed, ex.: 'arg1, arg2, ..., argn |> body");
 
         return new FunctionValue(ctx.info, args, body);
     }
@@ -380,7 +387,7 @@ class Program
     static IValue ASTValue(Token ctx, ReadOnlySpan<Token> inner)
     {
         if (inner.Length == 0)
-            throw new Exception($"{ctx.info} value is empty");
+            throw new CompileException(ctx.info, $"value is empty");
         else if (inner.Length == 1)
         {
             var t = inner[0];
@@ -389,27 +396,50 @@ class Program
                 TokenType.Number => new IntValue(t.info, BigInteger.Parse(t.value)),
                 TokenType.Identifier => new IdentValue(t.info, t.value),
                 TokenType.Bracket => ASTGenerate(t, t.inner),
-                _ => throw new Exception($"{t.info} unexpected token {t.type}")
+                _ => throw new CompileException(t.info, $"unexpected token {t.type}")
             };
         }
         else
         {
             var t = inner[1];
-            throw new Exception($"{t.info} unexpected token {t.value}");
+            throw new CompileException(t.info, $"unexpected token {t.value}");
         }
     }
-    static IValue ASTMath1(Token ctx, ReadOnlySpan<Token> inner) =>
-        Token.LeftParseExpression(
+    static IValue ASTCast(Token ctx, ReadOnlySpan<Token> inner)
+    {
+        var slices = Token.LeftSplit(
             ctx,
             tokens: inner,
-            types: [TokenType.Div, TokenType.Mul],
-            next: ASTValue,
-            executor: (op, a, b) => op.type switch
-            {
-                TokenType.Div => new DivValue(op.info, a, b),
-                TokenType.Mul => new MulValue(op.info, a, b)
-            }
+            types: [TokenType.Cast],
+            next: (ctx, toks) => (ctx, (Token[])[.. toks])
         );
+
+        var (context, tokens) = slices[0];
+        IValue value = ASTValue(context, tokens);
+
+        for (int i = 1; i < slices.Length; i++)
+        {
+            (context, tokens) = slices[i];
+            var (type, off) = ASTType(context, tokens, throw_errors: true);
+            if (off < tokens.Length)
+                throw new CompileException(tokens[off].info, "unexpected tokens after valid type identifier");
+            value = new Cast(context.info, value, type);
+        }
+
+        return value;
+    }
+    static IValue ASTMath1(Token ctx, ReadOnlySpan<Token> inner) =>
+            Token.LeftParseExpression(
+                ctx,
+                tokens: inner,
+                types: [TokenType.Div, TokenType.Mul],
+                next: ASTCast,
+                executor: (op, a, b) => op.type switch
+                {
+                    TokenType.Div => new DivValue(op.info, a, b),
+                    TokenType.Mul => new MulValue(op.info, a, b)
+                }
+            );
     static IValue ASTMath(Token ctx, ReadOnlySpan<Token> inner) =>
         Token.LeftParseExpression(
             ctx,
@@ -441,7 +471,7 @@ class Program
         if (cascade_slices.Length > 1)
         {
             // TODO cascade operator
-            throw new($"cascade operator is not supported yet");
+            throw new CompileException(ctx.info, $"cascade operator is not supported yet");
             if (cascade_slices.Length == 2)
             {
                 throw new($"");
@@ -462,10 +492,10 @@ class Program
                     if (op.type != TokenType.Set)
                         return ASTExpr(op, inner);
                     if (inner.Length != 1)
-                        throw new Exception($"{op.info} set operation must contains only name at right, value must be at left");
+                        throw new CompileException(op.info, $"set operation must contains only name at right, value must be at left");
                     var t = inner[0];
                     if (t.type != TokenType.Identifier)
-                        throw new Exception($"{op.info} set must contains name at right");
+                        throw new CompileException(op.info, $"set must contains name at right");
                     return new IdentValue(t.info, t.value);
                 },
                 same: ASTExpr,
@@ -535,7 +565,7 @@ class Program
                         case TokenType.If:
                             if (b is not Else block)
                             {
-                                throw new Exception($"{op.info} ?-> is not closed by :->");
+                                throw new CompileException(op.info, $"?-> is not closed by :->");
                             }
                             result = new Condition(op.info, a, block.then, block.other);
                             break;
@@ -690,7 +720,8 @@ class Program
         );
         RunProgram(
             "Iterate",
-            @"0=i |> i==10 ?> (i) :> i+1=i |> i"
+            @"0=i |> i==10 ?> (i) :> (i+1) -> i64 -> i32=i |> i",
+            log_llvm: true
         );
         RunProgram(
             "Iterate through Addition Function",
@@ -712,6 +743,19 @@ class Program
                 |> repeat' ('ignore, a, b |> a + b), 0, 10
                 |> repeat' ('ignore, a, b |> a + b), 0, 10",
             //@"('self, i, to |> i==to ?> (i) :> self' self, i+1, to)=repeat |> repeat' repeat, 0, 10 |> repeat' repeat, 0, 10",
+            log_llvm: true
+        );
+        RunProgram(
+            "Break?",
+            @"
+('self, x |> 
+    ('outer, y |> outer' outer, y) = inner
+    |> inner' self, x
+)=F
+
+|> F' F, 0
+|> 0
+",
             log_llvm: true
         );
         //RunProgram(@"('to, f |> 0=i |> i==to ?> (i) :> 'f i |> i+1=i |> i)=count |> 0=sum |> (10 ||> count ||> 'e |> sum+e=sum) |> sum");

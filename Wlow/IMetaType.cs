@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using LLVMSharp.Interop;
+using Wlow.Types;
 
 namespace Wlow;
 
@@ -6,14 +8,50 @@ public interface IMetaType
 {
     bool IsGeneric();
     void Binary(BinaryWriter writer);
-    LLVMValueRef ImplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to, bool generic_frendly=true);
+    LLVMValueRef ImplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to, bool generic_frendly = true);
     IMetaType ImplicitCast(Scope sc, Info info, IMetaType to);
+    LLVMValueRef ExplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to);
+    IMetaType ExplicitCast(Scope sc, Info info, IMetaType to);
     LLVMTypeRef Type(Scope sc);
     string Name(Scope sc);
 }
 
 public static class MetaTypeHelper
 {
+    public static bool Is<T>(this IMetaType type)
+    where T : IMetaType
+    {
+        type = type.Unwrap();
+        return type is T;
+    }
+
+    public static bool Is<T>(this IMetaType type, [MaybeNullWhen(true)] out T result)
+    where T : IMetaType
+    {
+        type = type.Unwrap();
+        if (type is T meta)
+        {
+            result = meta;
+            return true;
+        }
+        result = default;
+        return false;
+    }
+
+    public static bool IsNot<T>(this IMetaType type)
+    where T : IMetaType
+    => !Is<T>(type);
+
+    public static bool IsNot<T>(this IMetaType type, [MaybeNullWhen(false)] out T result)
+    where T : IMetaType
+    => !Is<T>(type, out result);
+
+    public static IMetaType Unwrap(this IMetaType type)
+    {
+        while (type is GenericLinkMeta meta) type = meta.CurrentType;
+        return type;
+    }
+
     public static string AsBin(this IMetaType type)
     {
         using var memory = new MemoryStream();

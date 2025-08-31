@@ -1,10 +1,9 @@
-~include(implicits.mcs.api)
-
 using LLVMSharp.Interop;
 
 namespace Wlow.Types;
 
 public partial class BoolMeta {
+  ~include(implicits.mcs.api)
   ~define('body:
     'if(BoolMeta,
       'on(type, return to;)
@@ -12,4 +11,17 @@ public partial class BoolMeta {
     )
   )
   'implicits(body, bool)
+
+  ~include(explicits.mcs.api)
+  ~define('body:
+    'if(IntMeta,
+      'on(type, return to;)
+      'on(cast, return sc.bi.BuildIntCast2(val, to.Type(sc), false);)
+    )
+    'if(BoolMeta,
+      'on(type, return to;)
+      'on(cast, return val;)
+    )
+  )
+  'explicits(body, bool)
 }

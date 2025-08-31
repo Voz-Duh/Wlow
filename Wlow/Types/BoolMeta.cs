@@ -10,7 +10,7 @@ public partial class BoolMeta : IMetaType
     public static readonly BoolMeta Get = new();
 
     public bool IsGeneric() => false;
-    
+
     public string Name(Scope sc) => "bool";
 
     public LLVMTypeRef Type(Scope sc) => sc.ctx.Int1Type;

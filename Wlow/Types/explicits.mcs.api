@@ -14,9 +14,9 @@
   }
 )
 
-~define('implicits(code, name):
+~define('explicits(code, name):
   ~define('__region:cast)
-  public LLVMValueRef ImplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to, bool generic_frendly)
+  public LLVMValueRef ExplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to)
   {
   START:
     {
@@ -27,13 +27,10 @@
       }
     }
     'streval('code)
-    if (generic_frendly){
-      'if(GenericMeta, return val;)
-    }
-    throw new CompileException(info, $"type 'name cannot be implicitly casted to {to.Name(sc)}");
+    throw new CompileException(info, $"type 'name cannot be casted to {to.Name(sc)}");
   }
   ~define('__region:type)
-  public IMetaType ImplicitCast(Scope sc, Info info, IMetaType to)
+  public IMetaType ExplicitCast(Scope sc, Info info, IMetaType to)
   {
   START:
     {
@@ -44,7 +41,6 @@
       }
     }
     'streval('code)
-    'if(GenericMeta, return this;)
-    throw new CompileException(info, $"type 'name cannot be implicitly casted to {to.Name(sc)}");
+    throw new CompileException(info, $"type 'name cannot be casted to {to.Name(sc)}");
   }
 )

@@ -16,4 +16,11 @@ public partial class GenericMeta {
     )
   )
   'implicits(body, generic)
+
+  ~include(explicits.mcs.api)
+  ~define('body:
+    'on(type, return to;)
+    'on(cast, return val;)
+  )
+  'explicits(body, bool)
 }

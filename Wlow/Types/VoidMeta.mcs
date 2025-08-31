@@ -1,10 +1,9 @@
-~include(implicits.mcs.api)
-
 using LLVMSharp.Interop;
 
 namespace Wlow.Types;
 
 public partial class VoidMeta {
+  ~include(implicits.mcs.api)
   ~define('body:
     'if(VoidMeta,
       'on(type, return to;)
@@ -12,4 +11,13 @@ public partial class VoidMeta {
     )
   )
   'implicits(body, void)
+
+  ~include(explicits.mcs.api)
+  ~define('body:
+    'if(VoidMeta,
+      'on(type, return to;)
+      'on(cast, return val;)
+    )
+  )
+  'explicits(body, void)
 }

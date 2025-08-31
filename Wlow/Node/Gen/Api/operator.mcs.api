@@ -7,8 +7,8 @@
 
 ~define('if(left, right, body):
   {
-    if (a_raw_ty is 'left  a_ty
-     && b_raw_ty is 'right b_ty)
+    if (a_raw_ty.Is<'left >(out var a_ty)
+     && b_raw_ty.Is<'right>(out var b_ty))
     {
       'body
     }
@@ -24,7 +24,7 @@
 
     'streval('code)
 
-    throw new Exception($"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+    throw new CompileException(info, $"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
   }
 
   ~define('__region:base)
@@ -40,6 +40,6 @@
 
     'streval('code)
 
-    throw new Exception($"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+    throw new CompileException(info, $"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
   }
 )

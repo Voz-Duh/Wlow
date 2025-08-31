@@ -13,8 +13,8 @@ public readonly record struct LLVMValue(
 {
     public LLVMValueRef Get(Scope sc)
     {
-        if (is_jump || type is VoidMeta)
-            throw new($"{info} value type is cannot be void");
+        if (type.Is<VoidMeta>())
+            throw new CompileException(info, $"value type is cannot be void");
         if (link != null)
             return sc.bi.BuildLoad2(type.Type(sc), (LLVMValueRef)link);
         return val;

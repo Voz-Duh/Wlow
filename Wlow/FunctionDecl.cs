@@ -1,6 +1,5 @@
 
 using System.Numerics;
-using System.Text;
 using LLVMSharp.Interop;
 using Wlow.Types;
 
@@ -33,13 +32,32 @@ public class FunctionDecl(
 
     private readonly Dictionary<string, FunctionDefinition> Definitions = definitions ?? [];
 
-    private static string CallingStackedMessage(string message)
-        => string.Join("\n", [message, .. CallingStack.Select(v => $"from {v}"), $"at {message}"]);
+    private T TryDo<T>(Info info, string bin, Func<T> func, FunctionDefinition definition=default, bool remove_resolver=false)
+    {
+        ResolvingStack[(UniqueNumber, bin)] = definition;
+        CallingStack.Push(info);
+        try
+        {
+            var res = func();
+            CallingStack.Pop();
+            if (remove_resolver)
+                ResolvingStack.Remove((UniqueNumber, bin));
+            return res;
+        }
+        catch (CompileException e) 
+        {
+            if (e is StackedCompileException) throw;
+            var error = new StackedCompileException(CallingStack, e.Info, e.BaseMessage, e);
+            CallingStack.Pop();
+            ResolvingStack.Remove((UniqueNumber, bin));
+            throw error;
+        }
+    }
 
     public LLVMValue CastTo(Scope sc, Info info, FunctionMeta to)
     {
         if (to.arguments.Length != arguments.Count)
-            throw new($"{info} function with {arguments.Count} waited arguments cannot be casted to function with {to.arguments.Length} waited arguments");
+            throw new CompileException(info, $"function with {arguments.Count} waited arguments cannot be casted to function with {to.arguments.Length} waited arguments");
 
         var i = 0;
         var args = new Dictionary<string, IMetaType>(
@@ -49,15 +67,15 @@ public class FunctionDecl(
                 var arg = to.arguments[i++];
                 try
                 {
-                    if (v.Value is FunctionMeta meta)
+                    if (v.Value.Is<FunctionMeta>(out var meta))
                     {
                         return KeyValuePair.Create(v.Key, CastTo(sc, info, meta).type);
                     }
                     return KeyValuePair.Create(v.Key, arg.ImplicitCast(sc, info, v.Value));
                 }
-                catch (Exception e)
+                catch (CompileException e)
                 {
-                    throw new($"{e.Message} at argument {i + 1}");
+                    throw new CompileException(e.Info, $"at argument {i + 1}: {e.BaseMessage}");
                 }
             })
         );
@@ -88,7 +106,7 @@ public class FunctionDecl(
             return new FunctionMeta(args, GenericMeta.Get);
 
         if (args.Length != arguments.Count)
-            throw new($"{info} called function waiting for {arguments.Count} arguments but {args.Length} is passed");
+            throw new CompileException(info, $"called function waiting for {arguments.Count} arguments but {args.Length} is passed");
 
         var i = 0u;
         var arg_types =
@@ -98,7 +116,7 @@ public class FunctionDecl(
                 .Where(v =>
                 {
                     var arg = args[i];
-                    if (v.Value is FunctionMeta meta)
+                    if (v.Value.Is<FunctionMeta>(out var meta))
                         return false;
                     return true;
                 })
@@ -118,7 +136,7 @@ public class FunctionDecl(
     public LLVMValue Call(Scope sc, Info info, LLVMValue[] args)
     {
         if (args.Length != arguments.Count)
-            throw new($"{info} called function waiting for {arguments.Count} but {args.Length} is passed");
+            throw new CompileException(info, $"called function waiting for {arguments.Count} but {args.Length} is passed");
 
         var i = 0u;
         var arg_types = new IMetaType[args.Length];
@@ -133,7 +151,7 @@ public class FunctionDecl(
                     var type = arg.type.ImplicitCast(sc, arg.info, v.Value);
                     arg_types[i++] = type;
 
-                    if (type is FunctionMeta meta)
+                    if (type.Is<FunctionMeta>(out var meta))
                         return (false, default, type);
 
                     return (true, arg.type.ImplicitCast(sc, arg.info, arg.Get(sc), type), arg.type);
@@ -157,102 +175,85 @@ public class FunctionDecl(
 
     private FunctionDefinition CreateDefinition(Scope base_scope, Info info, IMetaType[] args, bool type_only)
     {
+        var i = 0u;
+        var real_args =
+            new Dictionary<string, IMetaType>([
+                .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
+            ]);
+
+        var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
+        var resolve_bin = resolve_type.AsBin();
+
+        if (Definitions.TryGetValue(resolve_bin, out var defined) && defined.llvm_type.Handle != 0)
+            return defined;
+
+        i = 0u;
+        var type_scope = new Scope(
+            variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
+            ctx: base_scope.ctx,
+            bi: default,
+            mod: base_scope.mod,
+            fn: default
+        );
+
+        i = 0u;
+        var resolved_args = (IMetaType[])[.. SelectFunctionsResolved(args)];
+
+        Definitions[resolve_bin] = new(resolve_type, default, default);
+
+        var result_type = TryDo(info, resolve_bin, () => this.block.Type(type_scope));
+        if (result_type.Is<GenericMeta>())
+            result_type = VoidMeta.Get;
+
+        var func_type = new FunctionMeta(
+            resolved_args,
+            result_type,
+            declaration: this
+        );
+
+        if (type_only)
+        {
+            ResolvingStack.Remove((UniqueNumber, resolve_bin));
+            return new(func_type, default, default);
+        }
+
+        var llvm_func_type = func_type.LLVMBaseType(base_scope);
+
+        var func = base_scope.CreateFunction(llvm_func_type);
+
+        var result = new FunctionDefinition(func_type, llvm_func_type, func);
+
+        LLVMBasicBlockRef entry = func.AppendBasicBlock("entry");
+
+        using var bi = base_scope.ctx.CreateBuilder();
+        bi.PositionAtEnd(entry);
+
+        i = 0u;
+        var scope = new Scope(
+            new(
+                [
+                    .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
+                ]
+            ),
+            ctx: base_scope.ctx,
+            bi: bi,
+            mod: base_scope.mod,
+            fn: func
+        );
+
+        var ret = TryDo(info, resolve_bin, () => this.block.Compile(scope), definition: result, remove_resolver: true);
         try
         {
-            var i = 0u;
-            var real_args =
-                new Dictionary<string, IMetaType>([
-                    .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
-                ]);
-
-            var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
-            var resolve_bin = resolve_type.AsBin();
-
-            if (Definitions.TryGetValue(resolve_bin, out var defined) && defined.llvm_type.Handle != 0)
-                return defined;
-
-            ResolvingStack[(UniqueNumber, resolve_bin)] = default;
-
-            i = 0u;
-            var type_scope = new Scope(
-                variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
-                ctx: base_scope.ctx,
-                bi: default,
-                mod: base_scope.mod,
-                fn: default
-            );
-
-            i = 0u;
-            var resolved_args = (IMetaType[])[.. SelectFunctionsResolved(args)];
-
-            Definitions[resolve_bin] = new(resolve_type, default, default);
-
-            CallingStack.Push(info);
-            var result_type = this.block.Type(type_scope);
-            CallingStack.Pop();
-
-            if (result_type is GenericLinkMeta meta && meta.CurrentType is GenericMeta)
-                meta.CurrentType = VoidMeta.Get;
-
-            CallingStack.Push(info);
-            var func_type = new FunctionMeta(
-                resolved_args,
-                result_type,
-                declaration: this
-            );
-
-            if (type_only)
-            {
-                ResolvingStack.Remove((UniqueNumber, resolve_bin));
-                return new(func_type, default, default);
-            }
-
-            var llvm_func_type = func_type.LLVMBaseType(base_scope);
-
-            var func = base_scope.CreateFunction(llvm_func_type);
-
-            var result = new FunctionDefinition(func_type, llvm_func_type, func);
-
-            ResolvingStack[(UniqueNumber, resolve_bin)] = result;
-
-            LLVMBasicBlockRef entry = func.AppendBasicBlock("entry");
-
-            using var bi = base_scope.ctx.CreateBuilder();
-            bi.PositionAtEnd(entry);
-
-            i = 0u;
-            var scope = new Scope(
-                new(
-                    [
-                        .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
-                    ]
-                ),
-                ctx: base_scope.ctx,
-                bi: bi,
-                mod: base_scope.mod,
-                fn: func
-            );
-
-            var ret = this.block.Compile(scope);
-            try
-            {
-                bi.BuildRet(ret.Get(scope));
-            }
-            catch
-            {
-                bi.BuildRetVoid();
-            }
-
-            Definitions[resolve_bin] = result;
-
-            CallingStack.Pop();
-            ResolvingStack.Remove((UniqueNumber, resolve_bin));
-            return result;
+            bi.BuildRet(ret.Get(scope));
         }
-        catch (Exception e)
+        catch
         {
-            throw new(CallingStackedMessage(e.Message), e);
+            bi.BuildRetVoid();
         }
+
+        Definitions[resolve_bin] = result;
+
+        return result;
     }
 
     private static IEnumerable<TResult> SelectIf<TSource, TResult>(IEnumerable<TSource> source, Func<TSource, (bool, TResult)> selector)
@@ -279,7 +280,7 @@ public class FunctionDecl(
             .Select(v =>
             {
                 var type = args[j];
-                if (type is FunctionMeta meta)
+                if (type.Is<FunctionMeta>(out var meta))
                 {
                     j++;
                     return KeyValuePair.Create(
@@ -337,7 +338,7 @@ public class FunctionDecl(
         IMetaType[] collection)
         =>
         collection
-        .Where(v => v is not FunctionMeta);
+        .Where(v => v.IsNot<FunctionMeta>());
 
     private static IEnumerable<KeyValuePair<string, IMetaType>> SelectPairsNoFunctions<T>(
         IMetaType[] args,
@@ -350,7 +351,7 @@ public class FunctionDecl(
             collection
             .Where(v =>
             {
-                var add = selector(v.Value) is not FunctionMeta;
+                var add = selector(v.Value).IsNot<FunctionMeta>();
                 if (!add) j++;
                 return add;
             })

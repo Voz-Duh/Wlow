@@ -28,15 +28,15 @@ public readonly record struct Set(Info info, IValue value, string name) : IValue
         if (has && !variable.flags.HasFlag(VariableFlags.Setable))
         {
             if (variable.function != null)
-                throw new($"{name} is cannot be changed, function variables is immutable");
-            throw new($"{name} is cannot be changed from here");
+                throw new CompileException(info, $"{name} is cannot be changed, function variables is immutable");
+            throw new CompileException(info, $"{name} is cannot be changed from here");
         }
         bool is_func = false;
         if (!has)
         {
             var type = value.Type(sc);
             var block = sc.Block();
-            is_func = type is FunctionMeta;
+            is_func = type.Is<FunctionMeta>();
             variable = new(
                 type,
                 is_func ? default : sc.bi.BuildAlloca(type.Type(sc)),

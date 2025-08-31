@@ -15,7 +15,7 @@ public readonly record struct Jump(Info info, string name) : IValue
         {
             if (!variable.flags.HasFlag(VariableFlags.Jumpable))
             {
-                throw new($"{info} cannot jump to {name} from that scope");
+                throw new CompileException(info, $"cannot jump to {name} from that scope");
             }
             sc.bi.BuildBr(variable.block);
         }
