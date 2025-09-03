@@ -3,12 +3,21 @@ using LLVMSharp.Interop;
 
 namespace Wlow;
 
+public readonly record struct GhostArgument(BigInteger Identifier, IMetaType Type);
+
+public readonly record struct GhostVariable(LLVMValueRef Link, IMetaType Type, bool Used = false)
+{
+    public GhostVariable AsUsed => new(Link, Type, Used: true);
+}
+
 public readonly record struct Scope(
     Dictionary<string, Variable> variables,
+    Dictionary<string, GhostVariable> ghosts,
     LLVMContextRef ctx,
     LLVMBuilderRef bi,
     LLVMModuleRef mod,
-    LLVMValueRef fn
+    LLVMValueRef fn,
+    BigInteger Identifier
 )
 {
     static BigInteger unique = BigInteger.Zero;
@@ -18,7 +27,7 @@ public readonly record struct Scope(
 
     public LLVMValueRef CreateFunction(LLVMTypeRef type)
         => mod.AddFunction(unique++.ToString(), type);
-    
+
     public bool GetVariable(string name, out Variable variable, bool type_only = false)
     {
         if (variables.TryGetValue(name, out variable))
@@ -32,19 +41,19 @@ public readonly record struct Scope(
         return false;
     }
 
-    public Scope CloneArgumented()
+    private Scope Copy(
+        VariableFlags exclude = VariableFlags.None,
+        VariableFlags include = VariableFlags.None)
     {
         Dictionary<string, Variable> new_variables = [];
         foreach (var (key, variable) in variables)
-            new_variables[key] = variable.Exclude(VariableFlags.Jumpable);
-        return new(new_variables, ctx, bi, mod, fn);
+            new_variables[key] = variable.Exclude(exclude).Include(include);
+        return new(new_variables, ghosts, ctx, bi, mod, fn, Identifier);
     }
 
+    public Scope CloneArgumented()
+        => Copy(exclude: VariableFlags.Jumpable);
+
     public Scope CloneBraced()
-    {
-        Dictionary<string, Variable> new_variables = [];
-        foreach (var (key, variable) in variables)
-            new_variables[key] = variable;
-        return new(new_variables, ctx, bi, mod, fn);
-    }
+        => Copy();
 }

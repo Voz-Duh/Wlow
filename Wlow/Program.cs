@@ -578,45 +578,6 @@ class Program
             );
     }
 
-    static void TEST(Action<Scope> func)
-    {
-        // Initialize LLVM components.
-        LLVM.LinkInMCJIT();
-        LLVM.InitializeNativeTarget();
-        LLVM.InitializeNativeAsmPrinter();
-        LLVM.InitializeNativeAsmParser();
-        LLVM.InitializeNativeDisassembler();
-
-        using var context = LLVMContextRef.Create();
-
-        // Create a new LLVM module.
-        using var mod = context.CreateModuleWithName("LLVMSharpIntro");
-
-        // Define the function's return type and parameter types.
-        LLVMTypeRef main_type = LLVMTypeRef.CreateFunction(
-            context.Int32Type,
-            [context.Int32Type, context.Int32Type],
-            IsVarArg: false
-        );
-
-        // Add the 'main' function to the module.
-        LLVMValueRef main = mod.AddFunction("main", main_type);
-
-        // Append a basic block to the function.
-        LLVMBasicBlockRef entry = main.AppendBasicBlock("entry");
-
-        // Create an instruction builder and position it at the end of the entry block.
-        using (var builder = context.CreateBuilder())
-        {
-            builder.PositionAtEnd(entry);
-
-            var scope = new Scope([], context, builder, mod, main);
-            func(scope);
-        }
-
-        Console.WriteLine(mod);
-    }
-
     static void RunProgram(string name, string code, bool log_tokens=false, bool log_ast=false, bool log_llvm=false)
     {
         var toks = Token.Tokenize(code);
@@ -654,7 +615,7 @@ class Program
         {
             builder.PositionAtEnd(entry);
 
-            var scope = new Scope([], context, builder, mod, main);
+            var scope = new Scope([], [], context, builder, mod, main, Identifier: 0);
             var a = ast.Compile(scope);
             try
             {

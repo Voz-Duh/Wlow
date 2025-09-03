@@ -35,5 +35,17 @@ public readonly record struct CallValue(Info info, IValue value, IValue[] args) 
         return new(linkMeta.CurrentType, res.type.ImplicitCast(sc, info, res.Get(sc), linkMeta.CurrentType, false));
     }
 
+    public void Closure(Scope sc, Dictionary<string, ClosureType> registered)
+    {
+        value.Closure(sc, registered);
+        foreach (var arg in args)
+            arg.Closure(sc, registered);
+
+        var meta = value.Type(sc);
+        if (meta.IsNot<FunctionMeta>(out var func))
+            throw new CompileException(value.info, $"trying to call {meta.Name(sc)}");
+
+    }
+
     public override string ToString() => $"call({value})' args{args.FmtString()}";
 }

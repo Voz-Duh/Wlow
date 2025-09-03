@@ -16,6 +16,12 @@
 )
 
 ~define('operator_infix(code, name):
+  public void Closure(Scope sc, Dictionary<string, ClosureType> registered)
+  {
+    left.Closure(sc, registered);
+    right.Closure(sc, registered);
+  }
+
   ~define('__region:type)
   public IMetaType Type(Scope sc)
   {

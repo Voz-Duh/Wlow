@@ -7,7 +7,7 @@ public readonly record struct FunctionValue(Info info, Dictionary<string, IMetaT
     private readonly FunctionMeta RawType = new(
         [.. arguments.Select(v => v.Value)],
         GenericMeta.Get,
-        new FunctionDecl(info, arguments, block));
+        new FunctionDecl(info, arguments, [], block));
 
     public IMetaType Type(Scope sc) => RawType;
 

@@ -10,29 +10,32 @@ public readonly record struct FunctionDefinition(FunctionMeta type, LLVMTypeRef 
 public class FunctionDecl(
     Info info,
     Dictionary<string, IMetaType> arguments,
+    Dictionary<string, GhostArgument> ghosts,
     IValue block,
     Dictionary<string, FunctionDefinition> definitions = null,
-    BigInteger? unique_number = null)
+    BigInteger? unique_number = null,
+    int ghosts_start = -1)
 {
     [ThreadStatic]
     private static Dictionary<(BigInteger, string), FunctionDefinition> ResolvingStackValue;
     private static Dictionary<(BigInteger, string), FunctionDefinition> ResolvingStack => ResolvingStackValue ??= [];
-    
+
     [ThreadStatic]
     private static Stack<Info> CallingStackValue;
     private static Stack<Info> CallingStack => CallingStackValue ??= [];
 
-    private static BigInteger UniqueNumberGenerator = 0;
+    private static BigInteger UniqueNumberGenerator = 1;
     public readonly BigInteger UniqueNumber = unique_number ?? UniqueNumberGenerator++;
 
-    public Info info
-    { get; init; } = info;
+    public readonly Info info = info;
     public readonly Dictionary<string, IMetaType> arguments = arguments;
+    public readonly Dictionary<string, GhostArgument> ghosts = ghosts;
+    public readonly int ghosts_start = ghosts_start == -1 ? arguments.Count : ghosts_start;
     public readonly IValue block = block;
 
     private readonly Dictionary<string, FunctionDefinition> Definitions = definitions ?? [];
 
-    private T TryDo<T>(Info info, string bin, Func<T> func, FunctionDefinition definition=default, bool remove_resolver=false)
+    private T TryDo<T>(Info info, string bin, Func<T> func, FunctionDefinition definition = default, bool remove_resolver = false)
     {
         ResolvingStack[(UniqueNumber, bin)] = definition;
         CallingStack.Push(info);
@@ -44,7 +47,7 @@ public class FunctionDecl(
                 ResolvingStack.Remove((UniqueNumber, bin));
             return res;
         }
-        catch (CompileException e) 
+        catch (CompileException e)
         {
             if (e is StackedCompileException) throw;
             var error = new StackedCompileException(CallingStack, e.Info, e.BaseMessage, e);
@@ -94,43 +97,99 @@ public class FunctionDecl(
             return new(definition.type, definition.llvm_value);
         }
 
-        return new(type, function: new(info, args, block, Definitions));
+        return new(type, function: new(info, args, ghosts, block, Definitions));
     }
 
-    public FunctionMeta CallFunctionType(Scope sc, Info info, IMetaType[] args)
+    public (bool include, LLVMValueRef llvm, IMetaType type)[] SpecifyArguments<TElement>(
+        Scope sc,
+        TElement[] collection,
+        Func<TElement, IMetaType, bool> valid_selector,
+        Func<TElement, IMetaType, bool, LLVMValueRef> value_selector,
+        Func<TElement, IMetaType, IMetaType> type_selector)
     {
-        var bin_type = new FunctionMeta([.. args], VoidMeta.Get);
-        var bin = bin_type.AsBin();
+        var i = 0u;
+        return [
+                ..
+                arguments
+                .Select(v =>
+                {
+                    var arg = collection[i];
+                    var type = type_selector(arg, v.Value);
+                    var valid = valid_selector(arg, type);
 
-        if (ResolvingStack.ContainsKey((UniqueNumber, bin)))
-            return new FunctionMeta(args, GenericMeta.Get);
+                    return (valid, value_selector(arg, type, valid), type);
+                }),
+                ..
+                ghosts
+                .Select(v => {
+                    if (sc.Identifier == v.Value.Identifier)
+                    {
+                        if (sc.GetVariable(v.Key, out var variable))
+                            return (true, variable.llvm, variable.type);
+                        throw new CompileException(info, $"{Errors.NotNormal}");
+                    }
+                    var ghost = sc.ghosts[v.Key];
+                    return (true, ghost.Link, ghost.Type);
+                })
+            ];
+    }
 
+    public FunctionMeta CallFunctionType(Scope sc, Info info, (Info info, IMetaType type)[] args)
+    {
         if (args.Length != arguments.Count)
             throw new CompileException(info, $"called function waiting for {arguments.Count} arguments but {args.Length} is passed");
 
-        var i = 0u;
         var arg_types =
-            (IMetaType[])[
-                ..
-                arguments
-                .Where(v =>
-                {
-                    var arg = args[i];
-                    if (v.Value.Is<FunctionMeta>(out var meta))
-                        return false;
-                    return true;
-                })
-                .Select(v =>
-                {
-                    var arg = args[i++];
-                    var type = arg.ImplicitCast(sc, info, v.Value);
-                    return type;
-                }),
-            ];
+            SpecifyArguments(
+                sc,
+                args,
+                valid_selector: (v, t) => true,
+                value_selector: (v, t, a) => default,
+                type_selector: (v, to) => v.type.ImplicitCast(sc, v.info, to)
+            )
+            .Select(v => v.type)
+            .ToArray();
+
+        var bin_type = new FunctionMeta(arg_types, VoidMeta.Get);
+        var bin = bin_type.AsBin();
+
+        if (ResolvingStack.ContainsKey((UniqueNumber, bin)))
+            return new FunctionMeta(arg_types, GenericMeta.Get);
 
         var (result_type, _, _) = CreateDefinition(sc, info, arg_types, type_only: true);
 
         return result_type;
+    }
+
+    public FunctionMeta Closure(Scope sc, Info info, FunctionMeta type)
+    {
+        var closure_scope = new Scope(
+            variables: new(this.arguments.Select(v => KeyValuePair.Create(v.Key, new Variable(v.Value, default, default, default, default)))),
+            ghosts: [],
+            ctx: sc.ctx,
+            bi: default,
+            mod: sc.mod,
+            fn: default,
+            Identifier: UniqueNumber
+        );
+
+        var registered_ghosts = new Dictionary<string, ClosureType>();// (sc.ghosts.Select(v => KeyValuePair.Create(v.Key, ClosureType.Invisible)));
+        block.Closure(closure_scope, registered_ghosts);
+
+        return new(
+            type.arguments,
+            type.result,
+            new(
+                info,
+                arguments.ToDictionary(),
+                [
+                    ..
+                    registered_ghosts
+                    .Where(v => v.Value != ClosureType.None)
+                    .Select(sc.)
+                ]
+            )
+        );
     }
 
     public LLVMValue Call(Scope sc, Info info, LLVMValue[] args)
@@ -138,27 +197,17 @@ public class FunctionDecl(
         if (args.Length != arguments.Count)
             throw new CompileException(info, $"called function waiting for {arguments.Count} but {args.Length} is passed");
 
-        var i = 0u;
-        var arg_types = new IMetaType[args.Length];
+        var arg_types = new IMetaType[args.Length + ghosts.Count];
         var result_args =
-            ((bool include, LLVMValueRef llvm, IMetaType type)[])[
-                ..
-                arguments
-                .Select(v =>
-                {
-                    var arg = args[i];
+            SpecifyArguments(
+                sc,
+                args,
+                valid_selector: (v, t) => !t.Is<FunctionMeta>(out var meta),
+                value_selector: (v, t, a) => !a ? default : v.type.ImplicitCast(sc, v.info, v.Get(sc), t),
+                type_selector: (v, to) => v.type.ImplicitCast(sc, v.info, to)
+            );
 
-                    var type = arg.type.ImplicitCast(sc, arg.info, v.Value);
-                    arg_types[i++] = type;
-
-                    if (type.Is<FunctionMeta>(out var meta))
-                        return (false, default, type);
-
-                    return (true, arg.type.ImplicitCast(sc, arg.info, arg.Get(sc), type), arg.type);
-                }),
-            ];
-
-        var bin_type = new FunctionMeta([.. result_args.Select(v => v.type) ], VoidMeta.Get);
+        var bin_type = new FunctionMeta([.. result_args.Select(v => v.type)], VoidMeta.Get);
         var bin = bin_type.AsBin();
 
         var call_args = (LLVMValueRef[])[.. SelectIf(result_args, v => (v.include, v.llvm))];
@@ -179,6 +228,7 @@ public class FunctionDecl(
         var real_args =
             new Dictionary<string, IMetaType>([
                 .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
+                .. SelectPairsNoFunctions(args, ref i, this.ghosts,    selector: v => v.Type, ghosted: true),
             ]);
 
         var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
@@ -190,16 +240,26 @@ public class FunctionDecl(
         i = 0u;
         var type_scope = new Scope(
             variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
+            ghosts: [],
             ctx: base_scope.ctx,
             bi: default,
             mod: base_scope.mod,
-            fn: default
+            fn: default,
+            Identifier: UniqueNumber
         );
 
         i = 0u;
         var resolved_args = (IMetaType[])[.. SelectFunctionsResolved(args)];
 
         Definitions[resolve_bin] = new(resolve_type, default, default);
+        var registered_ghosts = (Dictionary<string, ClosureType>)[];
+        TryDo(info, resolve_bin, () => { this.block.Closure(type_scope, registered_ghosts); return 0; });
+        var ghosts = new Dictionary<string, GhostVariable>(
+                from v in registered_ghosts
+                where v.Value != ClosureType.None
+                where !this.ghosts.ContainsKey(v.Key)
+                select KeyValuePair.Create(v.Key, base_scope.ghosts[v.Key])
+            );
 
         var result_type = TryDo(info, resolve_bin, () => this.block.Type(type_scope));
         if (result_type.Is<GenericMeta>())
@@ -228,17 +288,35 @@ public class FunctionDecl(
         using var bi = base_scope.ctx.CreateBuilder();
         bi.PositionAtEnd(entry);
 
+        var variables = new Dictionary<string, Variable>(
+            [
+                .. SelectVariablesFromTypes(
+                    args,
+                    ref i,
+                    func,
+                    bi,
+                    base_scope,
+                    this.arguments),
+                .. SelectVariablesFromTypes(
+                    args,
+                    ref i,
+                    func,
+                    bi,
+                    base_scope,
+                    new(this.ghosts.Select(v => KeyValuePair.Create(v.Key, v.Value.Type))),
+                    ghosted: true)
+            ]
+        );
+
         i = 0u;
         var scope = new Scope(
-            new(
-                [
-                    .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
-                ]
-            ),
+            variables,
+            ghosts,
             ctx: base_scope.ctx,
             bi: bi,
             mod: base_scope.mod,
-            fn: func
+            fn: func,
+            Identifier: UniqueNumber
         );
 
         var ret = TryDo(info, resolve_bin, () => this.block.Compile(scope), definition: result, remove_resolver: true);
@@ -271,7 +349,8 @@ public class FunctionDecl(
         LLVMValueRef llvm_function,
         LLVMBuilderRef llvm_function_builder,
         Scope base_scope,
-        Dictionary<string, IMetaType> collection)
+        Dictionary<string, IMetaType> collection,
+        bool ghosted = false)
     {
         uint real_arg = 0u;
         uint j = i;
@@ -294,8 +373,13 @@ public class FunctionDecl(
                         )
                     );
                 }
-                var link = llvm_function_builder.BuildAlloca(type.Type(base_scope));
-                llvm_function_builder.BuildStore(llvm_function.GetParam(real_arg++), link);
+                var link = llvm_function.GetParam(real_arg++);
+                if (!ghosted)
+                {
+                    var val = link;
+                    link = llvm_function_builder.BuildAlloca(type.Type(base_scope));
+                    llvm_function_builder.BuildStore(val, link);
+                }
                 j++;
                 return KeyValuePair.Create(
                     v.Key,
@@ -344,7 +428,8 @@ public class FunctionDecl(
         IMetaType[] args,
         ref uint i,
         Dictionary<string, T> collection,
-        Func<T, IMetaType> selector)
+        Func<T, IMetaType> selector,
+        bool ghosted = false)
     {
         var j = i;
         var res =
@@ -355,10 +440,17 @@ public class FunctionDecl(
                 if (!add) j++;
                 return add;
             })
-            .Select(v => KeyValuePair.Create(
-                v.Key,
-                args[j++]
-            ));
+            .Select(v =>
+                ghosted
+                ? KeyValuePair.Create(
+                    v.Key,
+                    selector(v.Value)
+                )
+                : KeyValuePair.Create(
+                    v.Key,
+                    args[j++]
+                )
+            );
         i = j;
         return res;
     }
