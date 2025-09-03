@@ -712,6 +712,23 @@ class Program
                     it makes sure that outer-outer function will pass needed ghosts here
                     call closure and pass all ghosts registered in closure
         */
+        /* TODO
+            Anonimous tuple and structure types.
+            Tuple:
+                Must be available to use FieldIndexAccessor node which is a representation for the "tuple.0"/"tuple.1" construction
+                FieldIndexAccessor will use overloading of "bool HasFieldIndex" and "LLVMValue FieldIndexGet(int i)"
+                FieldIndexAccessor pseudo example:
+                    if type.HasFieldIndex
+                        res = type.FieldIndexGet(index)
+                        if res.Has
+                            return res.Value
+                        else
+                            comperr "index {index} is not valid in tuple {type.Name(sc)} with {type.elements.Length} count"    
+                    else
+                        comperr "index access as field is available only for tuple types, or types derived from tuple"
+
+            Structures has the same arch but with string dictionary instead of array.
+        */
 
         RunProgram(
             "Infinity",

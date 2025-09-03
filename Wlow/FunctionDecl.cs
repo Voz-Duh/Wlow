@@ -25,8 +25,7 @@ public class FunctionDecl(
     private static BigInteger UniqueNumberGenerator = 0;
     public readonly BigInteger UniqueNumber = unique_number ?? UniqueNumberGenerator++;
 
-    public Info info
-    { get; init; } = info;
+    public readonly Info info = info;
     public readonly Dictionary<string, IMetaType> arguments = arguments;
     public readonly IValue block = block;
 
@@ -97,36 +96,49 @@ public class FunctionDecl(
         return new(type, function: new(info, args, block, Definitions));
     }
 
-    public FunctionMeta CallFunctionType(Scope sc, Info info, IMetaType[] args)
+    public (bool include, LLVMValueRef llvm, IMetaType type)[] SpecifyArguments<TElement>(
+        Scope sc,
+        TElement[] collection,
+        Func<uint, TElement, IMetaType, bool> valid_selector,
+        Func<uint, TElement, IMetaType, bool, LLVMValueRef> value_selector,
+        Func<uint, TElement, IMetaType, IMetaType> type_selector)
     {
-        var bin_type = new FunctionMeta([.. args], VoidMeta.Get);
-        var bin = bin_type.AsBin();
+        var i = 0u;
+        return [
+            ..
+            arguments
+                .Select(v =>
+                {
+                    var arg = collection[i];
+                    var type = type_selector(i, arg, v.Value);
+                    var valid = valid_selector(i, arg, type);
 
-        if (ResolvingStack.ContainsKey((UniqueNumber, bin)))
-            return new FunctionMeta(args, GenericMeta.Get);
+                    return (valid, value_selector(i++, arg, type, valid), type);
+                })
+        ];
+    }
 
+    public FunctionMeta CallFunctionType(Scope sc, Info info, (Info info, IMetaType type)[] args)
+    {
         if (args.Length != arguments.Count)
             throw new CompileException(info, $"called function waiting for {arguments.Count} arguments but {args.Length} is passed");
 
-        var i = 0u;
         var arg_types =
-            (IMetaType[])[
-                ..
-                arguments
-                .Where(v =>
-                {
-                    var arg = args[i];
-                    if (v.Value.Is<FunctionMeta>(out var meta))
-                        return false;
-                    return true;
-                })
-                .Select(v =>
-                {
-                    var arg = args[i++];
-                    var type = arg.ImplicitCast(sc, info, v.Value);
-                    return type;
-                }),
-            ];
+            SpecifyArguments(
+                sc,
+                args,
+                valid_selector: (i, v, t) => true,
+                value_selector: (i, v, t, a) => default,
+                type_selector: (i, v, to) => v.type.ImplicitCast(sc, v.info, to)
+            )
+            .Select(v => v.type)
+            .ToArray();
+
+        var bin_type = new FunctionMeta(arg_types, VoidMeta.Get);
+        var bin = bin_type.AsBin();
+
+        if (ResolvingStack.ContainsKey((UniqueNumber, bin)))
+            return new FunctionMeta(arg_types, GenericMeta.Get);
 
         var (result_type, _, _) = CreateDefinition(sc, info, arg_types, type_only: true);
 
@@ -138,25 +150,16 @@ public class FunctionDecl(
         if (args.Length != arguments.Count)
             throw new CompileException(info, $"called function waiting for {arguments.Count} but {args.Length} is passed");
 
-        var i = 0u;
         var arg_types = new IMetaType[args.Length];
+
         var result_args =
-            ((bool include, LLVMValueRef llvm, IMetaType type)[])[
-                ..
-                arguments
-                .Select(v =>
-                {
-                    var arg = args[i];
-
-                    var type = arg.type.ImplicitCast(sc, arg.info, v.Value);
-                    arg_types[i++] = type;
-
-                    if (type.Is<FunctionMeta>(out var meta))
-                        return (false, default, type);
-
-                    return (true, arg.type.ImplicitCast(sc, arg.info, arg.Get(sc), type), arg.type);
-                }),
-            ];
+            SpecifyArguments(
+                sc,
+                args,
+                valid_selector: (i, val, type) => type.IsNot<FunctionMeta>(),
+                value_selector: (i, val, type, valid) => valid ? val.type.ImplicitCast(sc, val.info, val.Get(sc), type) : default,
+                type_selector: (i, val, to) => arg_types[i] = val.type.ImplicitCast(sc, val.info, to)
+            );
 
         var bin_type = new FunctionMeta([.. result_args.Select(v => v.type) ], VoidMeta.Get);
         var bin = bin_type.AsBin();
@@ -351,9 +354,9 @@ public class FunctionDecl(
             collection
             .Where(v =>
             {
-                var add = selector(v.Value).IsNot<FunctionMeta>();
-                if (!add) j++;
-                return add;
+                var skip = selector(v.Value).Is<FunctionMeta>();
+                if (skip) j++;
+                return !skip;
             })
             .Select(v => KeyValuePair.Create(
                 v.Key,

@@ -12,7 +12,7 @@ public readonly record struct CallValue(Info info, IValue value, IValue[] args) 
         if (meta.IsNot<FunctionMeta>(out var func))
             throw new CompileException(value.info, $"trying to call {meta.Name(sc)}");
 
-        var res = func.Declaration.CallFunctionType(sc, info, [.. args.Select(v => v.Type(sc))]).result;
+        var res = func.Declaration.CallFunctionType(sc, info, [.. args.Select(v => (v.info, v.Type(sc)))]).result;
         if (res.Is<GenericMeta>())
         {
             linkMeta.CurrentType = GenericMeta.Get;
