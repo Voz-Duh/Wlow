@@ -40,7 +40,7 @@ public readonly record struct Condition(Info info, IValue cond, IValue then, IVa
         var block_result = sc.Block();
 
         var at_ty = cond.Type(sc);
-        var at = cond.Compile(sc).Get(sc);
+        var at = cond.Compile(sc).Get(cond.info, sc);
 
         sc.bi.BuildCondBr(
             at_ty.ImplicitCast(sc, cond.info, at, BoolMeta.Get),
@@ -54,7 +54,7 @@ public readonly record struct Condition(Info info, IValue cond, IValue then, IVa
         var a = then.Compile(sc);
 
         LLVMValueRef? a_llvm = null;
-        try { a_llvm = a.Get(sc); } catch { }
+        try { a_llvm = a.Get(then.info, sc); } catch { }
 
         if (a_llvm != null) sc.bi.BuildBr(block_result);
 
@@ -64,7 +64,7 @@ public readonly record struct Condition(Info info, IValue cond, IValue then, IVa
         var b = other.Compile(sc);
 
         LLVMValueRef? b_llvm = null;
-        try { b_llvm = b.Get(sc); } catch { }
+        try { b_llvm = b.Get(other.info, sc); } catch { }
 
         if (b_llvm != null) sc.bi.BuildBr(block_result);
 

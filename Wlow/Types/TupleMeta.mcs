@@ -1,0 +1,35 @@
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public readonly partial struct TupleMeta {
+  ~include(implicits.mcs.api)
+  ~define('body:
+    'if(TupleMeta,
+      'on(type,
+        if (this.SameWith(type))
+          return to;
+      )
+      'on(cast,
+        if (this.SameWith(type))
+          return val;
+      )
+    )
+  )
+  'implicits(body, {Name(sc)})
+
+  ~include(explicits.mcs.api)
+  ~define('body:
+    'if(TupleMeta,
+      'on(type,
+        if (this.SameWith(type))
+          return to;
+      )
+      'on(cast,
+        if (this.SameWith(type))
+          return val;
+      )
+    )
+  )
+  'explicits(body, bool)
+}

@@ -23,6 +23,7 @@ public enum TokenType
     Else,
     Cascade,
     Flow,
+    NumberLeftDotted,
     Number,
     Mul,
     Div,
@@ -43,7 +44,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
     public override string ToString() => $"({info}: {type} {value ?? inner.FmtString()})";
 
 
-    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|-?(\d+)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
+    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|(\.\d+)|-?(\d+\.?\d*)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
     private static partial Regex Regex();
     private readonly static Regex regex = Regex();
 
@@ -284,7 +285,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 
 class Program
 {
-    static (IMetaType type, int offset) ASTType(Token ctx, ReadOnlySpan<Token> inner, bool throw_errors=false)
+    static (IMetaType type, int offset) ASTType(Token ctx, ReadOnlySpan<Token> inner, bool throw_errors = false)
     {
         if (throw_errors && inner.Length == 0)
             throw new CompileException(ctx.info, "type is cannot be empty");
@@ -314,7 +315,7 @@ class Program
                                     var (typ, j) = ASTType(ctx, inner);
                                     if (j != inner.Length)
                                         throw new CompileException(inner[0].info, "function type cannot have named arguments");
- 
+
                                     return typ;
                                 });
 
@@ -384,26 +385,88 @@ class Program
         return new FunctionValue(ctx.info, args, body);
     }
 
+    static IValue ASTAccessors(IValue at, Token token)
+        => token.type switch
+        {
+            TokenType.NumberLeftDotted
+                => int.TryParse(token.value, out var val)
+                ? new IndexedFieldAccessor(token.info, at, val)
+                : throw new CompileException(token.info, $"index {token.value} is too big to be processed"),
+            _ => throw new CompileException(token.info, $"invalid token used to access value")
+        };
+
     static IValue ASTValue(Token ctx, ReadOnlySpan<Token> inner)
     {
         if (inner.Length == 0)
             throw new CompileException(ctx.info, $"value is empty");
-        else if (inner.Length == 1)
+
+        IValue value = null;
+        int i = 0;
+
+        if (inner.Length >= (i = 1))
         {
             var t = inner[0];
-            return t.type switch
+            switch (t.type)
             {
-                TokenType.Number => new IntValue(t.info, BigInteger.Parse(t.value)),
-                TokenType.Identifier => new IdentValue(t.info, t.value),
-                TokenType.Bracket => ASTGenerate(t, t.inner),
-                _ => throw new CompileException(t.info, $"unexpected token {t.type}")
-            };
+                case TokenType.Number:
+                    value = new IntValue(t.info, BigInteger.Parse(t.value));
+                    break;
+                case TokenType.Identifier:
+                    value = new IdentValue(t.info, t.value);
+                    break;
+                case TokenType.Bracket:
+                    var tupleable = !t.inner.Any(v => v.type == TokenType.Function);
+                    if (tupleable)
+                    {
+                        var args = Token.LeftSplit(
+                            t,
+                            t.inner,
+                            [TokenType.Comma],
+                            next: (ctx, inner) => (ctx, inner: (Token[])[.. inner])
+                        );
+
+                        if (args.Length != 1)
+                        {
+                            if (args.Last().inner.Length == 0)
+                                args = args[..^1];
+
+                            value = new TupleValue(
+                                t.info,
+                                [.. args.Select(v => ASTGenerate(v.ctx, v.inner, jumpable: false))]
+                            );
+                            break;
+                        }
+                    }
+                    value = ASTGenerate(t, t.inner);
+                    break;
+                default:
+                    throw new CompileException(t.info, $"unexpected token {t.type}");
+            }
         }
-        else
+
+        while (i < inner.Length)
         {
-            var t = inner[1];
-            throw new CompileException(t.info, $"unexpected token {t.value}");
+            var t = inner[i];
+            if (t.type == TokenType.NumberLeftDotted)
+            {
+                value = ASTAccessors(value, new(new(t.info.column+1, t.info.line), t.type, t.value[1..]));
+                i += 1;
+            }
+            /* TODO
+            if (t.type == TokenType.Identifier)
+            {
+                if (i + 1 >= inner.Length)
+                {
+                    throw new CompileException(t.info, $"dot access is ended with nothing");
+                }
+            }
+            */
+            else
+            {
+                throw new CompileException(t.info, $"unexpected token {t.value}");
+            }
         }
+        return value;
     }
     static IValue ASTCast(Token ctx, ReadOnlySpan<Token> inner)
     {
@@ -479,7 +542,7 @@ class Program
         }
 
         if (inner.Length == 1 && inner[0].type == TokenType.Identifier)
-                return new Jump(inner[0].info, inner[0].value);
+            return new Jump(inner[0].info, inner[0].value);
 
         static IValue ValueParse(Token ctx, ReadOnlySpan<Token> inner)
             => Token.RightParseExpression(
@@ -617,7 +680,7 @@ class Program
         Console.WriteLine(mod);
     }
 
-    static void RunProgram(string name, string code, bool log_tokens=false, bool log_ast=false, bool log_llvm=false)
+    static void RunProgram(string name, string code, bool log_tokens = false, bool log_ast = false, bool log_llvm = false)
     {
         var toks = Token.Tokenize(code);
         if (log_tokens) Console.WriteLine(toks.FmtString());
@@ -658,7 +721,7 @@ class Program
             var a = ast.Compile(scope);
             try
             {
-                builder.BuildRet(a.Get(scope));
+                builder.BuildRet(a.Get(new(), scope));
             }
             catch
             {
@@ -730,6 +793,12 @@ class Program
             Structures has the same arch but with string dictionary instead of array.
         */
 
+        RunProgram(
+            "Tuple",
+            @"(1, 45)=a |> a.0 + a.1 + ((1, 2).0)",
+            log_llvm: true,
+            log_ast: true
+        );
         RunProgram(
             "Infinity",
             @"('a |> a' a)=b |> b' b",

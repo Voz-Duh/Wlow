@@ -8,10 +8,10 @@ public enum BinaryType
     Int32,
     Int64,
     Generic,
-    FunctionDecl,
-    FunctionDeclEnd,
     FunctionStart,
     FunctionGhosts,
-    FunctionReturn,
+    FunctionDecl,
     FunctionEnd,
+    TupleStart,
+    TupleEnd,
 }

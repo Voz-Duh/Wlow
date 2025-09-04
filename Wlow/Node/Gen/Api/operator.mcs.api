@@ -32,11 +32,11 @@
   {
     var a_raw_ty = left.Type(sc);
     var a_lty = a_raw_ty.Type(sc);
-    var a = left.Compile(sc).Get(sc);
+    var a = left.Compile(sc).Get(left.info, sc);
 
     var b_raw_ty = right.Type(sc);
     var b_lty = b_raw_ty.Type(sc);
-    var b = right.Compile(sc).Get(sc);
+    var b = right.Compile(sc).Get(right.info, sc);
 
     'streval('code)
 

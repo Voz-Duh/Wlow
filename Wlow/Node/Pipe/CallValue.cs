@@ -28,11 +28,11 @@ public readonly record struct CallValue(Info info, IValue value, IValue[] args) 
         if (func.function == null)
             throw new CompileException(value.info, $"trying to call {func.type.Name(sc)}");
 
-        var res = func.function.Call(sc, info, [.. args.Select(v => v.Compile(sc))]);
+        var res = func.function.Call(sc, info, [.. args.Select(v => (v.info, v.Compile(sc)))]);
         if (linkMeta.CurrentType.Is<GenericMeta>()
             || linkMeta.CurrentType.Is<VoidMeta>())
             return res;
-        return new(linkMeta.CurrentType, res.type.ImplicitCast(sc, info, res.Get(sc), linkMeta.CurrentType, false));
+        return new(linkMeta.CurrentType, res.type.ImplicitCast(sc, info, res.Get(info, sc), linkMeta.CurrentType, false));
     }
 
     public override string ToString() => $"call({value})' args{args.FmtString()}";

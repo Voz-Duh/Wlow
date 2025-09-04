@@ -62,7 +62,7 @@ public readonly record struct Set(Info info, IValue value, string name) : IValue
             goto Final;
         }
         
-        llvm = res.type.ImplicitCast(sc, res.info, res.Get(sc), variable.type);
+        llvm = res.type.ImplicitCast(sc, value.info, res.Get(value.info, sc), variable.type);
         sc.bi.BuildStore(llvm, variable.llvm);
 
     Final:

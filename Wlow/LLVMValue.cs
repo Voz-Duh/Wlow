@@ -8,10 +8,9 @@ public readonly record struct LLVMValue(
     LLVMValueRef val = default,
     LLVMValueRef? link = null,
     FunctionDecl function = null,
-    bool is_jump = false,
-    Info info = default)
+    bool is_jump = false)
 {
-    public LLVMValueRef Get(Scope sc)
+    public LLVMValueRef Get(Info info, Scope sc)
     {
         if (type.Is<VoidMeta>())
             throw new CompileException(info, $"value type is cannot be void");

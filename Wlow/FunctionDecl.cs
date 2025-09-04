@@ -145,7 +145,7 @@ public class FunctionDecl(
         return result_type;
     }
 
-    public LLVMValue Call(Scope sc, Info info, LLVMValue[] args)
+    public LLVMValue Call(Scope sc, Info info, (Info info, LLVMValue value)[] args)
     {
         if (args.Length != arguments.Count)
             throw new CompileException(info, $"called function waiting for {arguments.Count} but {args.Length} is passed");
@@ -157,8 +157,8 @@ public class FunctionDecl(
                 sc,
                 args,
                 valid_selector: (i, val, type) => type.IsNot<FunctionMeta>(),
-                value_selector: (i, val, type, valid) => valid ? val.type.ImplicitCast(sc, val.info, val.Get(sc), type) : default,
-                type_selector: (i, val, to) => arg_types[i] = val.type.ImplicitCast(sc, val.info, to)
+                value_selector: (i, val, type, valid) => valid ? val.value.type.ImplicitCast(sc, val.info, val.value.Get(val.info, sc), type) : default,
+                type_selector: (i, val, to) => arg_types[i] = val.value.type.ImplicitCast(sc, val.info, to)
             );
 
         var bin_type = new FunctionMeta([.. result_args.Select(v => v.type) ], VoidMeta.Get);
@@ -247,7 +247,7 @@ public class FunctionDecl(
         var ret = TryDo(info, resolve_bin, () => this.block.Compile(scope), definition: result, remove_resolver: true);
         try
         {
-            bi.BuildRet(ret.Get(scope));
+            bi.BuildRet(ret.Get(info, scope));
         }
         catch
         {

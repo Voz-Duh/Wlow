@@ -24,7 +24,7 @@ public readonly partial struct FunctionMeta(IMetaType[] arguments, IMetaType res
     public bool IsGeneric() => arguments.Any(v => v.IsGeneric());
     
     public string Name(Scope sc)
-        => $"({string.Join(", ", arguments.Select(v => v.Name(sc)))}) {result}";
+        => $"'({string.Join(", ", arguments.Select(v => v.Name(sc)))}) {result}";
 
     public LLVMTypeRef LLVMBaseType(Scope sc)
         => LLVMTypeRef.CreateFunction(

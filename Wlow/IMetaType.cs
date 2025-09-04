@@ -6,6 +6,13 @@ namespace Wlow;
 
 public interface IMetaType
 {
+    int IndexedFieldsCount => 0;
+    bool HasIndexedFields => false;
+    LLVMValue? IndexedFieldGet(Scope sc, Info info, LLVMValueRef val, int index, bool as_pointer, bool type_only = false) => null;
+
+    bool HasFields => false;
+    LLVMValue? FieldGet(Scope sc, Info info, LLVMValueRef val, string name, bool as_pointer, bool type_only = false) => null;
+
     bool IsGeneric();
     void Binary(BinaryWriter writer);
     LLVMValueRef ImplicitCast(Scope sc, Info info, LLVMValueRef val, IMetaType to, bool generic_frendly = true);
@@ -18,6 +25,8 @@ public interface IMetaType
 
 public static class MetaTypeHelper
 {
+    public static bool SameWith(this TupleMeta a, TupleMeta b) => a.AsBin() == b.AsBin();
+
     public static bool Is<T>(this IMetaType type)
     where T : IMetaType
     {
