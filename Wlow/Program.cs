@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.Intrinsics.Wasm;
 using System.Text.RegularExpressions;
 using LLVMSharp.Interop;
 using Wlow.Node;
@@ -33,6 +34,7 @@ public enum TokenType
     Int16,
     Int32,
     Int64,
+    Packed,
     Identifier,
     Newline,
     Ignore,
@@ -44,7 +46,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
     public override string ToString() => $"({info}: {type} {value ?? inner.FmtString()})";
 
 
-    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|(\.\d+)|-?(\d+\.?\d*)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
+    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|(\.\d+)|-?(\d+\.?\d*)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\bpacked\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
     private static partial Regex Regex();
     private readonly static Regex regex = Regex();
 
@@ -400,6 +402,33 @@ class Program
         if (inner.Length == 0)
             throw new CompileException(ctx.info, $"value is empty");
 
+        (IValue value, bool tuple) BracketParse(Token t, bool packed = false)
+        {
+            var tupleable = !t.inner.Any(v => v.type == TokenType.Function);
+            if (tupleable)
+            {
+                var args = Token.LeftSplit(
+                    t,
+                    t.inner,
+                    [TokenType.Comma],
+                    next: (ctx, inner) => (ctx, inner: (Token[])[.. inner])
+                );
+
+                if (args.Length != 1)
+                {
+                    if (args.Last().inner.Length == 0)
+                        args = args[..^1];
+
+                    return (new TupleValue(
+                        t.info,
+                        [.. args.Select(v => ASTGenerate(v.ctx, v.inner, jumpable: false))],
+                        packed
+                    ), true);
+                }
+            }
+            return (ASTGenerate(t, t.inner), false);
+        }
+
         IValue value = null;
         int i = 0;
 
@@ -415,32 +444,24 @@ class Program
                     value = new IdentValue(t.info, t.value);
                     break;
                 case TokenType.Bracket:
-                    var tupleable = !t.inner.Any(v => v.type == TokenType.Function);
-                    if (tupleable)
-                    {
-                        var args = Token.LeftSplit(
-                            t,
-                            t.inner,
-                            [TokenType.Comma],
-                            next: (ctx, inner) => (ctx, inner: (Token[])[.. inner])
-                        );
-
-                        if (args.Length != 1)
-                        {
-                            if (args.Last().inner.Length == 0)
-                                args = args[..^1];
-
-                            value = new TupleValue(
-                                t.info,
-                                [.. args.Select(v => ASTGenerate(v.ctx, v.inner, jumpable: false))]
-                            );
-                            break;
-                        }
-                    }
-                    value = ASTGenerate(t, t.inner);
+                    value = BracketParse(t).value;
                     break;
-                default:
-                    throw new CompileException(t.info, $"unexpected token {t.type}");
+            }
+        }
+        if (value is null && inner.Length >= (i = 2))
+        {
+            var t0 = inner[0];
+            var t1 = inner[1];
+            switch (t0.type)
+            {
+                case TokenType.Packed:
+                    var is_tuple = false;
+                    if (t1.type == TokenType.Bracket)
+                        (value, is_tuple) = BracketParse(t1, packed: true);
+
+                    if (!is_tuple)
+                        throw new CompileException(t0.info, $"packed is must be used before of tuple or structure literal");
+                    break;
             }
         }
 
@@ -449,7 +470,7 @@ class Program
             var t = inner[i];
             if (t.type == TokenType.NumberLeftDotted)
             {
-                value = ASTAccessors(value, new(new(t.info.column+1, t.info.line), t.type, t.value[1..]));
+                value = ASTAccessors(value, new(new(t.info.column + 1, t.info.line), t.type, t.value[1..]));
                 i += 1;
             }
             /* TODO
@@ -795,7 +816,7 @@ class Program
 
         RunProgram(
             "Tuple",
-            @"(1, 45)=a |> a.0 + a.1 + ((1, 2).0)",
+            @"packed (2, 1)=b |> (1, 45)=a |> b.0 + b.1 + a.0 + a.1 + ((1, 2).0)",
             log_llvm: true,
             log_ast: true
         );
