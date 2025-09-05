@@ -9,7 +9,7 @@ public readonly record struct FunctionDefinition(FunctionMeta type, LLVMTypeRef 
 
 public class FunctionDecl(
     Info info,
-    Dictionary<string, IMetaType> arguments,
+    Pair<string, IMetaType>[] arguments,
     IValue block,
     Dictionary<string, FunctionDefinition> definitions = null,
     BigInteger? unique_number = null)
@@ -26,7 +26,7 @@ public class FunctionDecl(
     public readonly BigInteger UniqueNumber = unique_number ?? UniqueNumberGenerator++;
 
     public readonly Info info = info;
-    public readonly Dictionary<string, IMetaType> arguments = arguments;
+    public readonly Pair<string, IMetaType>[] arguments = arguments;
     public readonly IValue block = block;
 
     private readonly Dictionary<string, FunctionDefinition> Definitions = definitions ?? [];
@@ -55,34 +55,34 @@ public class FunctionDecl(
 
     public LLVMValue CastTo(Scope sc, Info info, FunctionMeta to)
     {
-        if (to.arguments.Length != arguments.Count)
-            throw new CompileException(info, $"function with {arguments.Count} waited arguments cannot be casted to function with {to.arguments.Length} waited arguments");
+        if (to.arguments.Length != arguments.Length)
+            throw new CompileException(info, $"function with {arguments.Length} waited arguments cannot be casted to function with {to.arguments.Length} waited arguments");
 
         var i = 0;
-        var args = new Dictionary<string, IMetaType>(
+        var args =
             arguments
             .Select(v =>
             {
                 var arg = to.arguments[i++];
                 try
                 {
-                    if (v.Value.Is<FunctionMeta>(out var meta))
+                    if (v.value.Is<FunctionMeta>(out var meta))
                     {
-                        return KeyValuePair.Create(v.Key, CastTo(sc, info, meta).type);
+                        return Pair.From(v.ident, CastTo(sc, info, meta).type);
                     }
-                    return KeyValuePair.Create(v.Key, arg.ImplicitCast(sc, info, v.Value));
+                    return Pair.From(v.ident, arg.ImplicitCast(sc, info, v.value));
                 }
                 catch (CompileException e)
                 {
                     throw new CompileException(e.Info, $"at argument {i + 1}: {e.BaseMessage}");
                 }
             })
-        );
+            .ToArray();
 
         var type = new FunctionMeta(
             [
                 ..
-                args.Select(v =>  v.Value)
+                args.Select(v =>  v.value)
             ],
             result: GenericMeta.Get,
             declaration: this
@@ -107,21 +107,21 @@ public class FunctionDecl(
         return [
             ..
             arguments
-                .Select(v =>
-                {
-                    var arg = collection[i];
-                    var type = type_selector(i, arg, v.Value);
-                    var valid = valid_selector(i, arg, type);
+            .Select(v =>
+            {
+                var arg = collection[i];
+                var type = type_selector(i, arg, v.value);
+                var valid = valid_selector(i, arg, type);
 
-                    return (valid, value_selector(i++, arg, type, valid), type);
-                })
+                return (valid, value_selector(i++, arg, type, valid), type);
+            })
         ];
     }
 
     public FunctionMeta CallFunctionType(Scope sc, Info info, (Info info, IMetaType type)[] args)
     {
-        if (args.Length != arguments.Count)
-            throw new CompileException(info, $"called function waiting for {arguments.Count} arguments but {args.Length} is passed");
+        if (args.Length != arguments.Length)
+            throw new CompileException(info, $"called function waiting for {arguments.Length} arguments but {args.Length} is passed");
 
         var arg_types =
             SpecifyArguments(
@@ -147,8 +147,8 @@ public class FunctionDecl(
 
     public LLVMValue Call(Scope sc, Info info, (Info info, LLVMValue value)[] args)
     {
-        if (args.Length != arguments.Count)
-            throw new CompileException(info, $"called function waiting for {arguments.Count} but {args.Length} is passed");
+        if (args.Length != arguments.Length)
+            throw new CompileException(info, $"called function waiting for {arguments.Length} but {args.Length} is passed");
 
         var arg_types = new IMetaType[args.Length];
 
@@ -192,7 +192,7 @@ public class FunctionDecl(
 
         i = 0u;
         var type_scope = new Scope(
-            variables: new([.. FictiveVariablesFrom(new(SelectPairs(args, ref i, this.arguments)))]),
+            variables: new([.. FictiveVariablesFrom(new(SelectKeyValuePairs(args, ref i, this.arguments)))]),
             ctx: base_scope.ctx,
             bi: default,
             mod: base_scope.mod,
@@ -235,7 +235,7 @@ public class FunctionDecl(
         var scope = new Scope(
             new(
                 [
-                    .. SelectVariablesFromTypes(args, ref i, func, bi, base_scope, this.arguments),
+                    .. SelectVariablesFrom(args, ref i, func, bi, base_scope, this.arguments),
                 ]
             ),
             ctx: base_scope.ctx,
@@ -268,13 +268,13 @@ public class FunctionDecl(
         }
     }
 
-    private static IEnumerable<KeyValuePair<string, Variable>> SelectVariablesFromTypes(
+    private static IEnumerable<KeyValuePair<string, Variable>> SelectVariablesFrom(
         IMetaType[] args,
         ref uint i,
         LLVMValueRef llvm_function,
         LLVMBuilderRef llvm_function_builder,
         Scope base_scope,
-        Dictionary<string, IMetaType> collection)
+        Pair<string, IMetaType>[] collection)
     {
         uint real_arg = 0u;
         uint j = i;
@@ -287,7 +287,7 @@ public class FunctionDecl(
                 {
                     j++;
                     return KeyValuePair.Create(
-                        v.Key,
+                        v.ident,
                         new Variable(
                             type,
                             default,
@@ -301,7 +301,7 @@ public class FunctionDecl(
                 llvm_function_builder.BuildStore(llvm_function.GetParam(real_arg++), link);
                 j++;
                 return KeyValuePair.Create(
-                    v.Key,
+                    v.ident,
                     new Variable(
                         type,
                         link,
@@ -346,7 +346,7 @@ public class FunctionDecl(
     private static IEnumerable<KeyValuePair<string, IMetaType>> SelectPairsNoFunctions<T>(
         IMetaType[] args,
         ref uint i,
-        Dictionary<string, T> collection,
+        Pair<string, T>[] collection,
         Func<T, IMetaType> selector)
     {
         var j = i;
@@ -354,28 +354,28 @@ public class FunctionDecl(
             collection
             .Where(v =>
             {
-                var skip = selector(v.Value).Is<FunctionMeta>();
+                var skip = selector(v.value).Is<FunctionMeta>();
                 if (skip) j++;
                 return !skip;
             })
             .Select(v => KeyValuePair.Create(
-                v.Key,
+                v.ident,
                 args[j++]
             ));
         i = j;
         return res;
     }
 
-    private static IEnumerable<KeyValuePair<string, IMetaType>> SelectPairs<T>(
+    private static IEnumerable<KeyValuePair<string, IMetaType>> SelectKeyValuePairs<T>(
         IMetaType[] args,
         ref uint i,
-        Dictionary<string, T> collection)
+        Pair<string, T>[] collection)
     {
         var j = i;
         var res =
             collection
             .Select(v => KeyValuePair.Create(
-                v.Key,
+                v.ident,
                 args[j++]
             ));
         i = j;

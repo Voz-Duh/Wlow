@@ -360,22 +360,21 @@ class Program
     }
     static FunctionValue ASTFunction(Token ctx, ReadOnlySpan<Token> inner)
     {
-        Dictionary<string, IMetaType> args = null;
+        Pair<string, IMetaType>[] args = null;
         IValue body = null;
 
         Token.LeftSplit(ctx, inner,
             [TokenType.Flow],
-            (ctx, inner) =>
+            next: (ctx, inner) =>
             {
                 if (args is null)
-                    args = new(
+                    args =
                         Token.LeftSplit(ctx, inner, [TokenType.Comma],
                         (ctx, inner) =>
                         {
                             var (typ, name) = ASTArgument(ctx, inner);
-                            return KeyValuePair.Create(name, typ);
-                        })
-                    );
+                            return Pair.From(name, typ);
+                        });
                 else body = ASTGenerate(ctx, inner);
                 return 0;
             },
