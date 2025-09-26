@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wlow", "Wlow\Wlow.csproj", "{45F67E7F-0734-484F-B74B-CDD5A980C70B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WlowNew", "WlowNew\WlowNew.csproj", "{21603A83-8D46-4680-81E1-054C5D393124}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{45F67E7F-0734-484F-B74B-CDD5A980C70B}.Release|x64.Build.0 = Release|Any CPU
 		{45F67E7F-0734-484F-B74B-CDD5A980C70B}.Release|x86.ActiveCfg = Release|Any CPU
 		{45F67E7F-0734-484F-B74B-CDD5A980C70B}.Release|x86.Build.0 = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|x64.Build.0 = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Debug|x86.Build.0 = Debug|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|x64.ActiveCfg = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|x64.Build.0 = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|x86.ActiveCfg = Release|Any CPU
+		{21603A83-8D46-4680-81E1-054C5D393124}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,0 +1,36 @@
+
+using LLVMSharp.Interop;
+
+namespace Wlow.Types;
+
+public readonly partial record struct UIntMeta {
+  ~include(implicits.mcs.api)
+  ~define('body:
+    'if(UIntMeta,
+      'on(type,
+        if (type.bits >= this.bits)
+          return to;
+      )
+      'on(cast,
+        if (type.bits >= this.bits)
+          return sc.bi.BuildIntCast2(val, to.Type(sc), false);
+      )
+    )
+  )
+  'implicits(body, u{bits})
+
+  ~include(explicits.mcs.api)
+  ~define('body:
+    'if(UIntMeta,
+      'on(type,
+        if (type.bits >= this.bits)
+          return to;
+      )
+      'on(cast,
+        if (type.bits >= this.bits)
+          return sc.bi.BuildIntCast2(val, to.Type(sc), false);
+      )
+    )
+  )
+  'explicits(body, u{bits})
+}

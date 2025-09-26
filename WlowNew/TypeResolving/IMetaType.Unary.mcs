@@ -1,0 +1,16 @@
+
+~define('op(name):IMetaType Operation'c('name)(Scope ctx, Info info);)
+
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public partial interface IMetaType
+{
+  'op(Ref)
+  'op(Deref)
+  'op(Negate)
+  'op(Plus)
+  'op(Not)
+  'op(Inv)
+}

@@ -1,0 +1,270 @@
+
+-- let concept: let is an analog of const in C
+-- mut concept: mut is an analog of mut in Rust
+
+-- condition uses "=" to create scope:
+if cond = a
+else = b
+-- means in Rust-like code: if cond {a} else {b}
+-- the main goal of that syntax - to make scopes a lot more greedy
+
+-- about ";"
+-- code:
+if cond = a
+else = b;
+c
+-- will be parsed as: (if cond = a else = b); c
+-- it's because ";" here stays after an uncontinuous expression
+
+-- code:
+if cond = a
+else = let b = c;
+b
+-- will be parsed as: if cond = a else = (let b = c; b)
+-- it's because ";" here stays after let, which is a continuous expression, which means that it will continue the scope until uncontinuous expression, or will return value, if it's on the end of scope, example: let a = (let a = 0); here the second let is in brackets, which made it's return value basically 0
+
+-- about ";;" 
+-- ";;" is basically a continue only delimiter
+let a =
+ function' b;
+ c
+-- will be parsed as:
+let a = (function' b); c
+-- with continue delimiter:
+let a =
+ function' b;;
+ c
+-- will be parsed as:
+let a = (function' b; c)
+
+-- let variable
+let i = 0;
+-- i is immutable:
+-- err: i = 1;
+
+-- mut variable
+mut i = 0;
+-- i is mutable:
+i = 1;
+
+-- function
+let id = fn a = a;
+-- that function gets "a" argument and returns value of "a"
+-- notice, that function is "let type", more about this below
+let i = id' 1;
+-- ' is used to call, passed arguments must be delimited by comma
+
+-- type definition
+type id = ?;
+-- type definitions has "template" idea in they
+-- that id type is a template to one unknown type (?)
+-- you can define it like:
+type opt = { value ?, has bool };
+-- and it will work
+
+-- type can be initialized like: type literal
+let i = id 5;
+-- it's okay, type can be immutable
+mut j = id 5;
+-- it's okay, type can me mutable
+
+-- immutable type:
+let type id = ?;
+let i = id 5;
+-- it's okay, let type can be immutable
+-- but cannnot be mutable:
+-- err: mut j = id 5;
+
+-- mutable type:
+mut type id = ?;
+mut i = id 5;
+-- it's okay, let type can be mutable
+-- but cannnot be immutable:
+-- err: let j = id 5;
+
+-- mutable argument:
+let inc = fn mut a = a += 1;
+-- mutable arguments accepts only mutable variables and it's basically a reference to value
+mut i = 0;
+inc' i;
+-- i == 1
+
+-- immutable argument:
+let inc = fn let a = a + 1;
+-- immutable arguments accepts only immutable variables and it goal is a convention
+let i = 0;;
+let j = inc' i;
+-- i == 0
+-- j == 1
+
+-- just an argument:
+let inc = fn a = a + a;
+-- just arguments is a everytime-copy value and cannot accept "mut type" or "let type" values.
+let i = 0;
+let j = inc' i;
+-- i == 0
+-- j == 1
+
+-- implement on type
+type vec2 = (?, typeof(self.0));
+
+impl vec2 (self.x) = self.0;
+impl vec2 (self.y) = self.1;
+
+impl vec2 (self.xx) = vec2 (self.x, self.x);
+impl vec2 (self.xy) = vec2 (self.x, self.y);
+impl vec2 (self.yx) = vec2 (self.y, self.x);
+impl vec2 (self.yy) = vec2 (self.y, self.y);
+
+impl vec2 (self + other vec2(typeof(self.0)))
+    = vec2 (self.0 + other.0, self.1 + other.1);
+
+impl vec2 (self - other vec2(typeof(self.0)))
+    = vec2 (self.0 - other.0, self.1 - other.1);
+
+-- it's okay because self.x is defined above
+impl vec2 (self.len) = sqrt' self.x*self.x + self.y*self.y;
+
+impl vec2 (self.dist' other vec2(typeof(self.0))) = other.len - self.len;
+
+-- it's an example implementation of vec2
+
+-- recursion magic which is resolved because type resolve system 
+fib = fn f, n =
+    if n <= 1 = n 
+    else = (f' f, n - 1) + (f' f, n - 2));
+
+let fib_of_10 = fib' fib, 10;
+
+-- the "in" loop system 
+-- in the place of expected "for/while/etc" systems, here you can use only "in" to jump back and make cycles
+-- for example, equivalent of: for (int i = 0; i != 10; i++) sum += i;
+mut i = 0;
+if i == 10 = void
+else =
+ sum += i;
+ i += 1;
+ in i -- "i += 1; in i" can be sugared to "in i += 1", because of common case
+
+-- mutability systems match table:
+
+-- types:
+-- type — immutable, mutable, can be used with `mut` and `let` variable definition
+-- mut type — exclusive mutable, can be used with `mut` variable definition
+-- let type — exclusive immutable, Dan be used with `let` variable definition 
+-- variables: 
+-- let — immutable
+-- mut — mutable 
+-- arguments: 
+-- no modifier — immutable, cannot get `mut type`, can get `mut` variable as copy and `let` variable as copy
+-- let — explicitly immutable, can get `let` variables (type mutability check not included, any let variable is good)
+-- mut — mutable reference, can get `mut` variables, reference - not a copy (type mutability check not included, any mut variable is good)
+
+-- just rememeber the rule - invalid memory management is an algorithmical problem, language won't interfere algorithm
+let vec = (0, 1);
+let ptr = (malloc' sizeof(vec)) -> *mut (i32, i32);
+ptr.0 = 4;
+
+
+-- more about functions
+-- fixed functions is a functions which is fixed for a memory,
+-- fixed functions can be saved in memory.
+-- not fixed functions is just a typed declaration with body,
+-- or - a new type with a full info to create a new function definition based on function template,
+-- functions here is a very big lie, they will not be passed to another functions,
+-- because not fixed functions **cannot be saved**,
+-- so they will be passed to function call only like a types, without values.
+
+-- type recursion will be anyway resolved by template linked type - which will get ask mutations on type from the call to function body,
+-- if the type was not mutated (still a place holder),
+-- the type will be defined as "never", because only endless recursion cannot be typed by that method.
+
+let arr = [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ];
+-- remember
+let sum -- *mut { done bool, value i32 } -- =
+    let task =
+        mut sum = 0;
+        mut i = 0;
+        if i < arr.len =
+            sum += arr[i];
+            in i += 1
+        else = sum;
+
+-- wait
+let res = wait' sum;
+
+
+let arr = [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ];
+-- remember and wait for
+mut sum1 = 0;
+mut sum2 = 0;
+let sum_fn = fn mut sum, arr -> void =
+    mut i = 0;
+        if i < arr.len =
+        sum += arr[i];
+        in i += 1
+    else = sum;
+-- return type is void
+task =
+    mut i = 0;
+        if i < arr.len =
+        sum1 += arr[i];
+        in i += 1
+    else = sum;
+-- return type is void
+task = sum_fn' sum2, arr;
+
+(
+    let a ? = 0i32;
+    let b ? = (
+        fn  a ? = (
+            let b ? = a;
+            b));
+    (b' a);
+    let c ? = (fn  a ? = (a' a));
+    (c' (fn  a ? = 1i32));
+    let F ? = (
+        fn  self ?,  x ? = (
+            let inner ? = (
+                fn  outer ?,  y ? = (outer' outer, y));
+            (inner' self, x)));
+    (F' F, 0i32)
+)
+
+(
+    let a let i32 = 0i32;
+    let b let (fn ? -> ?) = (fn  a ? = (let b ? = a; b));
+    --: i32 -- (fn let i32 -> i32) = (let b let i32 = a; b) :--
+    (b' a);
+    let c let (fn ? -> ?) = (fn  a ? = (a' a));
+    --: i32 -- (fn  -> i32) = --: i32 -- (fn  -> i32) = 1i32 :-- (a' a) :--
+    (c' (fn  a ? = 1i32));
+    let F let (fn ?, ? -> ?) = (
+        fn  self ?,  x ? = (
+            let inner ? = (
+                fn  outer ?,  y ? = (outer' outer, y));
+            (inner' self, x)));
+    --: never -- (fn i32 -> never) = (let inner let (fn ?, ? -> ?) = (fn  outer ?,  y ? = (outer' outer, y)); --: never -- (fn i32 -> never) = -- never -- (--: ? -- (fn let (fn ?, ? -> ?), i32 -> ?) =  :-- (outer' outer, y)) :-- (inner' self, x)) :--
+    (F' F, 0i32)
+)
+
+let a i32 = 0;
+let b =
+    fn a =
+        let b = a;
+        b;
+b' a;
+
+let c = fn a = a' a;
+c' fn a = 1;
+
+let F = fn self, x = 
+    let inner = fn outer, y = outer' outer, y;
+    inner' self, x;
+F' F, 0
+
+
+(let a i32 = 0i32; let b ? = (fn  a ? = (let b ? = a; b)); (b' a); let c ? = (fn  a ? = (a' a)); (c' (fn  a ? = 1i32)); let F ? = (fn  self ?,  x ? = (let inner ? = (fn  outer ?,  y ? = (outer' outer, y)); (inner' self, x))); (F' F, 0i32))
+
+
+(let a let i32 = 0i32; let b let (fn ? -> ?) = (fn  a ? = (let b ? = a; b)); --: i32 -- (fn i32 -> i32) = (let b let i32 = a; b) :-- (b' a); let c let (fn ? -> ?) = (fn  a ? = (a' a)); --: i32 -- (fn (fn ? -> ?) -> i32) = --: i32 -- (fn (fn ? -> ?) -> i32) = 1i32 :-- (a' a) :-- (c' (fn  a ? = 1i32)); let F let (fn ?, ? -> ?) = (fn  self ?,  x ? = (let inner ? = (fn  outer ?,  y ? = (outer' outer, y)); (inner' self, x))); --: never -- (fn (fn ?, ? -> ?), i32 -> never) = (let inner let (fn ?, ? -> ?) = (fn  outer ?,  y ? = (outer' outer, y)); --: never -- (fn (fn ?, ? -> ?), i32 -> never) = -- never -- (--: ? -- (fn (fn ?, ? -> ?), i32 -> ?) =  :-- (outer' outer, y)) :-- (inner' self, x)) :-- (F' F, 0i32))

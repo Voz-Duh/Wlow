@@ -11,18 +11,18 @@
   --- LLVMValueRef b
   
   'if(IntMeta, IntMeta,
-    var is_a = a_ty.bytes > b_ty.bytes;
+    var is_a = a_ty.bits > b_ty.bits;
     var to = is_a ? a_raw_ty : b_raw_ty;
     'on(type,
-      return to;
+      'return_type(to);
     )
     'on(base,
       var to_llvm = is_a ? a_lty : b_lty;
       return new(
         to,
         sc.bi.'iop (
-          sc.bi.'icast(a, to_llvm),
-          sc.bi.'icast(b, to_llvm)
+          'i2s(a, to_llvm),
+          'i2s(b, to_llvm)
         )
       );
     )

@@ -1,7 +1,5 @@
-﻿using System.Collections;
+﻿using System.Data;
 using System.Numerics;
-using System.Reflection;
-using System.Runtime.Intrinsics.Wasm;
 using System.Text.RegularExpressions;
 using LLVMSharp.Interop;
 using Wlow.Node;
@@ -12,20 +10,29 @@ namespace Wlow;
 public enum TokenType
 {
     NaT,
+    Ignore,
     Bracket,
     BracketEnd,
+    Figure,
+    FigureEnd,
     NotEquals,
     Equals,
-    Set,
     Function,
     Comma,
+    Definition,
     Cast,
     If,
     Else,
     Cascade,
     Flow,
+    LowerEquals,
+    GreaterEquals,
+    Lower,
+    Greater,
+    Set,
     NumberLeftDotted,
     Number,
+    Dot,
     Mul,
     Div,
     Add,
@@ -37,22 +44,39 @@ public enum TokenType
     Packed,
     Identifier,
     Newline,
-    Ignore,
     Error,
 }
 
 public readonly partial record struct Token(Info info, TokenType type, string value = null, Token[] inner = null)
 {
+
+    private Token WithType(TokenType type)
+        => new(info, type, value, inner);
+
     public override string ToString() => $"({info}: {type} {value ?? inner.FmtString()})";
 
 
-    [GeneratedRegex(@"(\()|(\))|(!=)|(==)|(=)|(')|(,)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|(\.\d+)|-?(\d+\.?\d*)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\bpacked\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|([\t ]+)|(.)", RegexOptions.Multiline)]
+    [GeneratedRegex(@"([\t ]+|--[^\n]*)|(\()|(\))|(\{)|(\})|(!=)|(==)|(')|(,)|(\:\:)|(->)|(\?>)|(\:>)|(\|\|>)|(\|>)|(<=)|(>=)|(<)|(>)|(=)|(\.\d+)|-?(\d+\.?\d*)|(\.)|(\*)|(\\)|(\+)|(\-)|(\bi8\b)|(\bi16\b)|(\bi32\b)|(\bi64\b)|(\bpacked\b)|(\b[a-zA-Z_]\w*\b)|(\r?\n)|(.)", RegexOptions.Multiline)]
     private static partial Regex Regex();
     private readonly static Regex regex = Regex();
+    private readonly static (TokenType start, TokenType end, string name, string start_str, string end_str)[] GroupTokens = [
+        (
+            TokenType.Bracket,
+            TokenType.BracketEnd,
+            "bracket",
+            "(", ")"
+        ),
+        (
+            TokenType.Figure,
+            TokenType.FigureEnd,
+            "figure",
+            "{", "}"
+        )
+    ];
 
     public static Token[] Tokenize(string text)
     {
-        Stack<(List<Token> body, Info info)> stack = [];
+        Stack<(TokenType end, string name, string start_str, string end_str, List<Token> body, Info info)> stack = [];
         List<Token> tokens = [];
         var line = 1;
         var linestart = 0;
@@ -74,29 +98,47 @@ public readonly partial record struct Token(Info info, TokenType type, string va
             {
                 case TokenType.Ignore:
                     continue;
-                case TokenType.Bracket:
-                    stack.Push((tokens, info));
-                    tokens = [];
-                    continue;
-                case TokenType.BracketEnd:
-                    var inner = tokens;
-                    if (!stack.TryPop(out (List<Token> body, Info info) back))
-                    {
-                        throw new CompileException(info, $"unexpected brace end ')'");
-                    }
-                    tokens = back.body;
-                    tokens.Add(new(back.info, TokenType.Bracket, inner: [.. inner]));
-                    continue;
                 case TokenType.Newline:
                     linestart = start + m.Length;
                     line++;
                     continue;
             }
-            tokens.Add(new(info, type, value: value));
+            var grouped = false;
+            for (int i = 0; i < GroupTokens.Length; i++)
+            {
+                var (tstart, end, name, start_str, end_str) = GroupTokens[i];
+                if (tstart == type)
+                {
+                    stack.Push((end, name, start_str, end_str, tokens, info));
+                    tokens = [];
+                    grouped = true;
+                    break;
+                }
+                if (end == type)
+                {
+                    var inner = tokens;
+                    if (!stack.TryPop(out var back) || back.end != end)
+                    {
+                        throw new CompileException(info, $"unexpected '{end_str}' to end {name} without '{start_str}' for openning");
+                    }
+                    tokens = back.body;
+                    tokens.Add(new(back.info, tstart, inner: [.. inner]));
+                    grouped = true;
+                    break;
+                }
+            }
+            if (!grouped)
+            {
+                if (type == TokenType.Error)
+                {
+                    throw new CompileException(info, $"invalid entry");
+                }
+                tokens.Add(new(info, type, value: value));
+            }
         }
-        if (stack.TryPop(out (List<Token> body, Info info) check))
+        if (stack.TryPop(out var check))
         {
-            throw new CompileException(check.info, $"brace is not closed '('");
+            throw new CompileException(check.info, $"{check.name} is not closed by '{check.end_str}'");
         }
         return [.. tokens];
     }
@@ -108,6 +150,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         Func<Token, ReadOnlySpan<Token>, T> next,
         int split_count = -1)
     {
+        context = context.WithType(TokenType.NaT);
         if (split_count == 0) return [next(context, tokens)];
 
         Token ctx = context;
@@ -119,7 +162,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
             if (types.Any(v => v == cur.type))
             {
                 result.Add(next(ctx, tokens[..i]));
-                cur = ctx;
+                ctx = cur;
                 tokens = tokens[(i + 1)..];
                 split_count--;
                 if (split_count == 0) break;
@@ -139,6 +182,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         Func<Token, ReadOnlySpan<Token>, T> same = null,
         int count = -1)
     {
+        context = context.WithType(TokenType.NaT);
         if (count == 0) return next(context, tokens);
         for (int i = 0; i < tokens.Length; i++)
         {
@@ -175,6 +219,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         Func<Token, ReadOnlySpan<Token>, T> same = null,
         int count = -1)
     {
+        context = context.WithType(TokenType.NaT);
         if (count == 0) return next(context, tokens);
         for (int i = tokens.Length - 1; i >= 0; i--)
         {
@@ -211,6 +256,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         Func<Token, T, T, T> executor,
         Func<Token, ReadOnlySpan<Token>, T> same = null)
     {
+        context = context.WithType(TokenType.NaT);
         int group = 1;
         for (int i = 0; i < tokens.Length; i++)
         {
@@ -252,6 +298,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
         Func<Token, T, T, T> executor,
         Func<Token, ReadOnlySpan<Token>, T> same = null)
     {
+        context = context.WithType(TokenType.NaT);
         int group = 1;
         for (int i = tokens.Length - 1; i >= 0; i--)
         {
@@ -375,7 +422,7 @@ class Program
                             var (typ, name) = ASTArgument(ctx, inner);
                             return Pair.From(name, typ);
                         });
-                else body = ASTGenerate(ctx, inner);
+                else body = ASTExpression(ctx, inner);
                 return 0;
             },
             split_count: 1);
@@ -390,9 +437,11 @@ class Program
         => token.type switch
         {
             TokenType.NumberLeftDotted
-                => int.TryParse(token.value, out var val)
+            => int.TryParse(token.value, out var val)
                 ? new IndexedFieldAccessor(token.info, at, val)
                 : throw new CompileException(token.info, $"index {token.value} is too big to be processed"),
+            TokenType.Identifier
+            => new FieldAccessor(token.info, at, token.value),
             _ => throw new CompileException(token.info, $"invalid token used to access value")
         };
 
@@ -401,7 +450,44 @@ class Program
         if (inner.Length == 0)
             throw new CompileException(ctx.info, $"value is empty");
 
-        (IValue value, bool tuple) BracketParse(Token t, bool packed = false)
+        static IValue FigureParse(Token t, bool packed = false)
+        {
+            var args = Token.LeftSplit(
+                t,
+                t.inner,
+                [TokenType.Comma],
+                next: (ctx, inner)
+                => Token.RightParseExpression(
+                    ctx,
+                    tokens: inner,
+                    count: 1,
+                    types: [TokenType.Set],
+                    next: (op, inner) =>
+                    {
+                        if (op.type != TokenType.Set)
+                            throw new CompileException(op.info, "structure field cannot be unnamed");
+
+                        if (inner.Length != 1)
+                            throw new CompileException(op.info, "structure field must contains only name at right, value must be at left");
+
+                        var t = inner[0];
+                        if (t.type != TokenType.Identifier)
+                            throw new CompileException(op.info, "structure field must contains name at right");
+                        return (value: (IValue)null, name: t.value);
+                    },
+                    same: (ctx, inner) => (value: ASTExpression(ctx, inner), name: null),
+                    executor: (op, a, b) => (a.value, b.name)
+                )
+            );
+
+            return new StructValue(
+                t.info,
+                [.. args.Select(v => Pair.From(v.name, v.value))],
+                packed
+            );
+        }
+
+        static (IValue value, bool tuple) BracketParse(Token t, bool packed = false)
         {
             var tupleable = !t.inner.Any(v => v.type == TokenType.Function);
             if (tupleable)
@@ -420,12 +506,12 @@ class Program
 
                     return (new TupleValue(
                         t.info,
-                        [.. args.Select(v => ASTGenerate(v.ctx, v.inner, jumpable: false))],
+                        [.. args.Select(v => ASTExpression(v.ctx, v.inner, jumpable: false))],
                         packed
                     ), true);
                 }
             }
-            return (ASTGenerate(t, t.inner), false);
+            return (ASTExpression(t, t.inner), false);
         }
 
         IValue value = null;
@@ -445,6 +531,9 @@ class Program
                 case TokenType.Bracket:
                     value = BracketParse(t).value;
                     break;
+                case TokenType.Figure:
+                    value = FigureParse(t);
+                    break;
             }
         }
         if (value is null && inner.Length >= (i = 2))
@@ -454,12 +543,14 @@ class Program
             switch (t0.type)
             {
                 case TokenType.Packed:
-                    var is_tuple = false;
+                    var valid = false;
                     if (t1.type == TokenType.Bracket)
-                        (value, is_tuple) = BracketParse(t1, packed: true);
+                        (value, valid) = BracketParse(t1, packed: true);
+                    else if (t1.type == TokenType.Figure)
+                        (value, valid) = (FigureParse(t1, packed: true), true);
 
-                    if (!is_tuple)
-                        throw new CompileException(t0.info, $"packed is must be used before of tuple or structure literal");
+                    if (!valid)
+                        throw new CompileException(t0.info, "packed is must be used before of tuple or structure literal");
                     break;
             }
         }
@@ -467,21 +558,28 @@ class Program
         while (i < inner.Length)
         {
             var t = inner[i];
+            var valid = false;
             if (t.type == TokenType.NumberLeftDotted)
             {
                 value = ASTAccessors(value, new(new(t.info.column + 1, t.info.line), t.type, t.value[1..]));
-                i += 1;
+                i++;
+                valid = true;
             }
-            /* TODO
-            if (t.type == TokenType.Identifier)
+            else if (t.type == TokenType.Dot)
             {
                 if (i + 1 >= inner.Length)
                 {
                     throw new CompileException(t.info, $"dot access is ended with nothing");
                 }
+                i++;
+
+                var t1 = inner[i];
+
+                value = ASTAccessors(value, t1);
+                i++;
+                valid = true;
             }
-            */
-            else
+            if (!valid)
             {
                 throw new CompileException(t.info, $"unexpected token {t.value}");
             }
@@ -535,19 +633,30 @@ class Program
                 TokenType.Sub => new SubValue(op.info, a, b)
             }
         );
-    static IValue ASTExpr(Token ctx, ReadOnlySpan<Token> inner) =>
+    static IValue ASTOperations(Token ctx, ReadOnlySpan<Token> inner) =>
         Token.LeftParseExpression(
             ctx,
             tokens: inner,
-            types: [TokenType.Equals, TokenType.NotEquals],
+            types: [
+                TokenType.Equals,
+                TokenType.NotEquals,
+                TokenType.Lower,
+                TokenType.Greater,
+                TokenType.LowerEquals,
+                TokenType.GreaterEquals,
+            ],
             next: ASTMath,
             executor: (op, a, b) => op.type switch
             {
                 TokenType.Equals => new EqualsValue(op.info, a, b),
-                TokenType.NotEquals => new NotEqualsValue(op.info, a, b)
+                TokenType.NotEquals => new NotEqualsValue(op.info, a, b),
+                TokenType.Lower => new LowerValue(op.info, a, b),
+                TokenType.Greater => new GreaterValue(op.info, a, b),
+                TokenType.LowerEquals => new LowerEqualsValue(op.info, a, b),
+                TokenType.GreaterEquals => new GreaterEqualsValue(op.info, a, b)
             }
         );
-    static IValue ASTGlobals(Token ctx, ReadOnlySpan<Token> inner)
+    static IValue ASTExpressionGlobals(Token ctx, ReadOnlySpan<Token> inner)
     {
         (Token, Token[])[] cascade_slices = Token.LeftSplit(ctx, inner, [TokenType.Cascade], (ctx, inner) => (ctx, inner.ToArray()));
 
@@ -573,7 +682,7 @@ class Program
                 next: (op, inner) =>
                 {
                     if (op.type != TokenType.Set)
-                        return ASTExpr(op, inner);
+                        return ASTOperations(op, inner);
                     if (inner.Length != 1)
                         throw new CompileException(op.info, $"set operation must contains only name at right, value must be at left");
                     var t = inner[0];
@@ -581,7 +690,7 @@ class Program
                         throw new CompileException(op.info, $"set must contains name at right");
                     return new IdentValue(t.info, t.value);
                 },
-                same: ASTExpr,
+                same: ASTOperations,
                 executor: (op, a, b) => new Set(op.info, a, ((IdentValue)b).name)
             );
 
@@ -595,7 +704,7 @@ class Program
             {
                 if (value is null)
                     value = ValueParse(ctx, inner);
-                else args = inner.IsEmpty ? [] : Token.LeftSplit(ctx, inner, [TokenType.Comma], (ctx, inner) => ASTGenerate(ctx, inner));
+                else args = inner.IsEmpty ? [] : Token.LeftSplit(ctx, inner, [TokenType.Comma], (ctx, inner) => ASTExpression(ctx, inner));
                 return 0;
             },
             split_count: 1
@@ -605,7 +714,7 @@ class Program
             return new CallValue(value.info, value, args);
         return value;
     }
-    static IValue ASTGenerate(Token ctx, ReadOnlySpan<Token> inner, bool jumpable = true)
+    static IValue ASTExpression(Token ctx, ReadOnlySpan<Token> inner, bool jumpable = true)
     {
         if (!inner.IsEmpty)
         {
@@ -626,15 +735,15 @@ class Program
                     TokenType.Flow,
                 TokenType.If
                 ],
-                next: ASTGlobals,
+                next: ASTExpressionGlobals,
                 same: (ctx, ts) =>
                     Token.IndentLeftParseExpression(
                         ctx,
                         tokens: ts,
                         dedent: [TokenType.Else],
                         indent: [TokenType.If],
-                        next: (ctx, ts) => ASTGenerate(ctx, ts, false),
-                        same: (ctx, ts) => ASTGenerate(ctx, ts),
+                        next: (ctx, ts) => ASTExpression(ctx, ts, false),
+                        same: (ctx, ts) => ASTExpression(ctx, ts),
                         executor: (op, a, b) => new Else(op.info, a, b)
                     ),
                 executor: (op, a, b) =>
@@ -648,7 +757,7 @@ class Program
                         case TokenType.If:
                             if (b is not Else block)
                             {
-                                throw new CompileException(op.info, $"?-> is not closed by :->");
+                                throw new CompileException(op.info, $"?> is not closed by :>");
                             }
                             result = new Condition(op.info, a, block.then, block.other);
                             break;
@@ -661,43 +770,54 @@ class Program
             );
     }
 
-    static void TEST(Action<Scope> func)
+    static Definition[] ASTGenerate(Token ctx, ReadOnlySpan<Token> inner)
     {
-        // Initialize LLVM components.
-        LLVM.LinkInMCJIT();
-        LLVM.InitializeNativeTarget();
-        LLVM.InitializeNativeAsmPrinter();
-        LLVM.InitializeNativeAsmParser();
-        LLVM.InitializeNativeDisassembler();
+        var definitions = Token.LeftSplit(ctx, inner, [TokenType.Definition], next: (ctx, inner) => (ctx, value: inner.ToArray()));
+        if (definitions.Length == 1)
+            throw new CompileException(definitions[0].ctx.info, "Wlow program must have at least main definition, ex.: main :: 0");
 
-        using var context = LLVMContextRef.Create();
+        foreach (var (tok, value) in definitions)
+            if (value.Length == 0)
+                throw new CompileException(tok.info, "definition is cannot be empty");
 
-        // Create a new LLVM module.
-        using var mod = context.CreateModuleWithName("LLVMSharpIntro");
+        return [
+            ..
+            definitions[..^1].Select((v, i) =>
+            {
+                if (i == 0)
+                {
+                    if (v.value.Length != 1)
+                        throw new CompileException(v.ctx.info, "definition must contains only name at left");
 
-        // Define the function's return type and parameter types.
-        LLVMTypeRef main_type = LLVMTypeRef.CreateFunction(
-            context.Int32Type,
-            [context.Int32Type, context.Int32Type],
-            IsVarArg: false
-        );
+                    var t = v.value[0];
+                    if (t.type != TokenType.Identifier)
+                        throw new CompileException(v.ctx.info, $"definition must contains name at left, not token {t.value}");
 
-        // Add the 'main' function to the module.
-        LLVMValueRef main = mod.AddFunction("main", main_type);
+                    var (ctx, value) = definitions[i + 1];
+                    var toks =
+                        (i + 1 == definitions.Length - 1)
+                        ? value
+                        : value[0..^1];
+                    return new Definition(t.info, t.value, ASTExpression(ctx, toks));
+                }
+                else
+                {
+                    if (v.value.Length < 2)
+                        throw new CompileException(v.ctx.info, "definition must contains at least name at left");
 
-        // Append a basic block to the function.
-        LLVMBasicBlockRef entry = main.AppendBasicBlock("entry");
+                    var t = v.value[^1];
+                    if (t.type != TokenType.Identifier)
+                        throw new CompileException(v.ctx.info, $"definition must contains name at left, not token {t.value}");
 
-        // Create an instruction builder and position it at the end of the entry block.
-        using (var builder = context.CreateBuilder())
-        {
-            builder.PositionAtEnd(entry);
-
-            var scope = new Scope([], context, builder, mod, main);
-            func(scope);
-        }
-
-        Console.WriteLine(mod);
+                    var (ctx, value) = definitions[i + 1];
+                    var toks =
+                        i + 1 == definitions.Length - 1
+                        ? value
+                        : value[0..^1];
+                    return new Definition(t.info, t.value, ASTExpression(ctx, toks));
+                }
+            })
+        ];
     }
 
     static void RunProgram(string name, string code, bool log_tokens = false, bool log_ast = false, bool log_llvm = false)
@@ -705,7 +825,7 @@ class Program
         var toks = Token.Tokenize(code);
         if (log_tokens) Console.WriteLine(toks.FmtString());
         var ast = ASTGenerate(new(Info.One, TokenType.Error), toks);
-        if (log_ast) Console.WriteLine(ast);
+        if (log_ast) foreach (var node in ast) Console.WriteLine(node);
 
         // Initialize LLVM components.
         LLVM.LinkInMCJIT();
@@ -720,33 +840,207 @@ class Program
         using var mod = context.CreateModuleWithName("LLVMSharpIntro");
 
         // Define the function's return type and parameter types.
-        LLVMTypeRef main_type = LLVMTypeRef.CreateFunction(
+        var main_type = LLVMTypeRef.CreateFunction(
             context.Int32Type,
-            [context.Int32Type, context.Int32Type],
+            // int argc, char *argv[]
+            [context.Int32Type, context.Int8Type.Ptr(0).Ptr(0)],
             IsVarArg: false
         );
 
         // Add the 'main' function to the module.
-        LLVMValueRef main = mod.AddFunction("main", main_type);
+        var main = mod.AddFunction("main", main_type);
 
         // Append a basic block to the function.
-        LLVMBasicBlockRef entry = main.AppendBasicBlock("entry");
+        var entry = main.AppendBasicBlock("entry");
 
         // Create an instruction builder and position it at the end of the entry block.
         using (var builder = context.CreateBuilder())
         {
             builder.PositionAtEnd(entry);
 
-            var scope = new Scope([], context, builder, mod, main);
-            var a = ast.Compile(scope);
-            try
+            var scope = new Scope([], [], context, builder, mod, main);
+            foreach (var node in ast) node.Compile(scope);
+
+            if (!scope.global_variables.TryGetValue("main", out var result))
+                throw new CompileException(Info.One, "entry point is not founded, define main");
+
+            if (result.function != null)
             {
-                builder.BuildRet(a.Get(new(), scope));
+                switch (result.function.arguments.Length)
+                {
+                    case 0:
+                        result = result.function.Call(scope.CloneNoVariable(), result.function.info, []);
+                        break;
+                    case 1:
+                        var i8 = new IntMeta(8, BinaryType.Int8);
+                        var i32 = new IntMeta(32, BinaryType.Int32);
+
+                        var cstr = PointerMeta.To(i8, mut: false);
+                        var arr_cstr = PointerMeta.To(cstr, mut: false);
+
+                        var str =
+                            new StructMeta([
+                                new("len", i32),
+                                new("data", PointerMeta.To(i8, mut: false))
+                            ]);
+                        var array =
+                            new StructMeta([
+                                new("len", i32),
+                                new("data", PointerMeta.To(str, mut: false))
+                            ]);
+
+                        // get llvm types
+                        var llvm_i8_ty = i8.Type(scope);
+                        var llvm_i32_ty = i32.Type(scope);
+                        var llvm_cstr_ty = cstr.Type(scope);
+                        var llvm_arr_cstr_ty = arr_cstr.Type(scope);
+                        var llvm_str_ty = str.Type(scope);
+                        var llvm_array_ty = array.Type(scope);
+
+                        /*                        
+                            i = alloca i32
+                            *i = 0
+                            goto cond
+
+                            cond:
+                            i_ld = load i32 i
+                            if While(i_ld)
+                            then goto end
+                            else goto start
+
+                            start:
+                            Do(i_ld)
+                            *i = i_ld + 1
+                            goto cond
+
+                            end:
+                        */
+                        LLVMValueRef Loop(
+                            Func<LLVMValueRef, LLVMValueRef> While,
+                            Action<LLVMValueRef> Do,
+                            bool ReturnI = false)
+                        {
+                            // define blocks
+                            var bb_cond = scope.Block();
+                            var bb_start = scope.Block();
+                            var bb_end = scope.Block();
+
+                            /*
+                                i = alloca i32
+                                *i = 0
+                                goto cond
+                            */
+                            var llvm_i = scope.bi.BuildAlloca(llvm_i32_ty);
+                            scope.bi.BuildStore(LLVMValueRef.CreateConstInt(llvm_i32_ty, 0), llvm_i);
+                            scope.bi.BuildBr(bb_cond);
+
+                            /*
+                                cond:
+                                i_ld = load i32 i
+                                if While(i_ld)
+                                then goto end
+                                else goto start
+                            */
+                            scope.bi.PositionAtEnd(bb_cond);
+                            var llvm_i_ld = scope.bi.BuildLoad2(llvm_i32_ty, llvm_i);
+                            scope.bi.BuildCondBr(
+                                If: While(llvm_i_ld),
+                                Then: bb_end,
+                                Else: bb_start
+                            );
+
+                            /*
+                                start:
+                                Do(i_ld)
+                                *i = i_ld + 1
+                                goto cond
+                            */
+                            scope.bi.PositionAtEnd(bb_start);
+                            Do(llvm_i_ld);
+                            scope.bi.BuildStore(
+                                Val: scope.bi.BuildAdd(llvm_i_ld, LLVMValueRef.CreateConstInt(llvm_i32_ty, 1)),
+                                Ptr: llvm_i
+                            );
+                            scope.bi.BuildBr(bb_cond);
+
+                            /*
+                                end:
+                            */
+                            scope.bi.PositionAtEnd(bb_end);
+                            return ReturnI ? scope.bi.BuildLoad2(llvm_i32_ty, llvm_i) : default;
+                        }
+                        /*
+                            len = args[0]
+                            ptr = args[1]
+                            strs = alloc[len] str
+                        */
+                        var llvm_len = main.GetParam(0);
+                        var llvm_ptr = main.GetParam(1);
+                        var llvm_strs = scope.bi.BuildArrayAlloca(llvm_str_ty, llvm_len);
+
+                        Loop(
+                            While: i => scope.bi.BuildICmp(LLVMIntPredicate.LLVMIntEQ, i, llvm_len),
+                            Do: i =>
+                            {
+                                var str = scope.bi.BuildGEP2(llvm_str_ty, llvm_strs, [i]);
+                                var cstr = scope.bi.BuildGEP2(llvm_i8_ty, llvm_ptr, [i]);
+                                var str_len = Loop(
+                                    ReturnI: true,
+                                    While: i =>
+                                        scope.bi.BuildICmp(LLVMIntPredicate.LLVMIntEQ,
+                                            scope.bi.BuildLoad2(llvm_i8_ty, scope.bi.BuildGEP2(llvm_i8_ty, cstr, [i])),
+                                            LLVMValueRef.CreateConstInt(llvm_i8_ty, 0)
+                                        ),
+                                    Do: i => { }
+                                );
+
+                                scope.bi.BuildStore(
+                                    str_len,
+                                    scope.bi.BuildStructGEP2(llvm_str_ty, str, 0)
+                                );
+                                scope.bi.BuildStore(
+                                    cstr,
+                                    scope.bi.BuildStructGEP2(llvm_str_ty, str, 1)
+                                );
+                            }
+                        );
+
+                        var llvm_res = scope.bi.BuildAlloca(llvm_array_ty);
+                        scope.bi.BuildStore(
+                            llvm_len,
+                            scope.bi.BuildStructGEP2(llvm_array_ty, llvm_res, 0)
+                        );
+                        scope.bi.BuildStore(
+                            llvm_strs,
+                            scope.bi.BuildStructGEP2(llvm_array_ty, llvm_res, 1)
+                        );
+
+                        result = result.function.Call(scope.CloneNoVariable(), result.function.info, [
+                            (
+                                result.function.info,
+                                new LLVMValue(
+                                    array,
+                                    val: scope.bi.BuildLoad2(llvm_array_ty, llvm_res)
+                                )
+                            )
+                        ]);
+                        break;
+                    default:
+                        throw new CompileException(result.function.info, "main can have only 2 signatures '() optional i32 or '({i32 len, *{i32 len, *i8 data}}) optional i32");
+                }
             }
-            catch
+
+            var fallback = true;
+            if (result.type.Is<IntMeta>())
             {
-                builder.BuildRetVoid();
+                try
+                {
+                    builder.BuildRet(result.Get(new(), scope));
+                    fallback = false;
+                }
+                catch { }
             }
+            if (fallback) builder.BuildRet(LLVMValueRef.CreateConstInt(context.Int32Type, 0));
         }
 
         if (log_llvm) Console.WriteLine($"Module:\n{mod}");
@@ -766,8 +1060,8 @@ class Program
 
         unsafe
         {
-            var wlow = (delegate* unmanaged[Cdecl]<int>)LLVM.GetPointerToGlobal(engine, main);
-            Console.WriteLine($"Result '{name}': {wlow()}");
+            var wlow = (delegate* unmanaged[Cdecl]<int, byte*, int>)LLVM.GetPointerToGlobal(engine, main);
+            Console.WriteLine($"Result '{name}': {wlow(0, null)}");
         }
     }
 
@@ -814,10 +1108,40 @@ class Program
         */
 
         RunProgram(
+            "Document try",
+@"
+main :: packed (2, 1)=b |> (1, 45)=a |> b.0 + b.1 + a.0 + a.1 + ((1, 2).0)
+");
+        RunProgram(
+            "Document based fib",
+@"
+fib :: 'n |> n <= 1 ?> (n) :> (fib' n - 1) + (fib' n - 2)
+main :: 'a
+    -- a.len here is 0
+    |> a.len=i
+    -- you also can use a.data, but right now pointers is not fully supported
+    -- and i mean that language only has pointers, nothing else
+    |> (fib' 10) + i
+");
+        RunProgram(
+            "Fib in main",
+@"
+main :: 'a
+    |> ('fib, n |> n <= 1 ?> (n) :> (fib' fib, n - 1) + (fib' fib, n - 2))=fib
+    -- a.len here is 0
+    |> a.len=i
+    -- you also can use a.data, but right now pointers is not fully supported
+    -- and i mean that language only has pointers, nothing else
+    |> (fib' fib, 10) + i
+");
+        /* outdated tests
+        RunProgram(
             "Tuple",
-            @"packed (2, 1)=b |> (1, 45)=a |> b.0 + b.1 + a.0 + a.1 + ((1, 2).0)",
-            log_llvm: true,
-            log_ast: true
+            @"packed (2, 1)=b |> (1, 45)=a |> b.0 + b.1 + a.0 + a.1 + ((1, 2).0)"
+        );
+        RunProgram(
+            "Structure",
+            @"packed {2=x, 1=y}=b |> {1=a, 45=b}=a |> b.x + b.y + a.a + a.b + {1=c, 2=e}.e"
         );
         RunProgram(
             "Infinity",
@@ -826,8 +1150,7 @@ class Program
         );
         RunProgram(
             "Iterate",
-            @"0=i |> i==10 ?> (i) :> (i+1) -> i64 -> i32=i |> i",
-            log_llvm: true
+            @"0=i |> i==10 ?> (i) :> (i+1) -> i64 -> i32=i |> i"
         );
         RunProgram(
             "Iterate through Addition Function",
@@ -852,7 +1175,7 @@ class Program
             log_llvm: true
         );
         RunProgram(
-            "Break?",
+            "Will break many compilers, but not that",
             @"
 ('self, x |> 
     ('outer, y |> outer' outer, y) = inner
@@ -864,6 +1187,7 @@ class Program
 ",
             log_llvm: true
         );
+        */
         //RunProgram(@"('to, f |> 0=i |> i==to ?> (i) :> 'f i |> i+1=i |> i)=count |> 0=sum |> (10 ||> count ||> 'e |> sum+e=sum) |> sum");
         //RunProgram(@"0=i |> (closure a |> a=i)=cls |> cls' 5 |> (i)");
         //RunProgram(@"(object ||> each ||> 'e |> log' e)");
@@ -879,7 +1203,7 @@ class Program
         each |||> 'array, f |> 0=i |> i<array.len ?> f' array.data[i] |> i+1=i |> i :> (i)
 
         example
-          |||> List' .i32=list
+          :: List' .i32=list
             |> List_add(&list, 34)
             |> List_add(&list, 4)
             |> List_add(&list, 54)

@@ -1,0 +1,11 @@
+~include(Api/operator.mcs.api)
+~include(Api/bitwise.mcs.api)
+
+using LLVMSharp.Interop;
+using Wlow.Types;
+
+namespace Wlow.Node;
+
+public readonly partial record struct BitOrValue {
+  'operator_infix(bitwise(BuildOr), bitwise oring)
+}

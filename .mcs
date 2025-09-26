@@ -2,8 +2,8 @@
 --- include all from Macro
 ~include "Macro"
 
---- will work at Wlow project
-~workpath "Wlow"
+--- will work at WlowNew project
+~workpath "WlowNew"
 
 --- result is .cs files
 ~result ".cs"

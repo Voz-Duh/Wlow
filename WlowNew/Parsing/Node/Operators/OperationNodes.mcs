@@ -1,0 +1,54 @@
+
+~define('op(name, optext):
+  public readonly record struct 'c('name)Node(
+    Info Info,
+    INode Left,
+    INode Right) : INode
+  {
+    public INodeTypeResolved TypeResolve(Scope scope)
+    {
+      var left = Left.TypeResolve(scope);
+      var right = Right.TypeResolve(scope);
+      var info = TypedValue.From(
+          left.ValueTypeInfo.Type.Operation'c('name)(scope, Info, right.ValueTypeInfo.Type)
+      );
+
+      return new 'c('name)NodeTypeResolved(Info, info, left, right);
+    }
+
+    public override string ToString() => $"({Left} 'optext {Right})";
+  }
+
+  public readonly record struct 'c('name)NodeTypeResolved(
+    Info Info,
+    TypedValue ValueTypeInfo,
+    INodeTypeResolved Left,
+    INodeTypeResolved Right) : INodeTypeResolved
+  {
+    public override string ToString() => $"({Left} 'optext {Right})";
+  }
+)
+using Wlow.Shared;
+using Wlow.TypeResolving;
+
+namespace Wlow.Parsing;
+
+'op(Equals, ==)
+'op(NotEquals, !=)
+'op(Lower, <)
+'op(Greater, >)
+'op(LowerEquals, <=)
+'op(GreaterEquals, >=)
+'op(Add, +)
+'op(Sub, -)
+'op(Mul, *)
+'op(Div, /)
+'op(Mod, %)
+'op(Shr, >>)
+'op(Shl, <<)
+'op(Ror, >>>)
+'op(Rol, <<<)
+'op(BitwiseAnd, &)
+'op(BitwiseOr, |)
+'op(LogicalAnd, &&)
+'op(LogicalOr, ||)

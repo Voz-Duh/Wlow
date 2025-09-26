@@ -23,4 +23,6 @@ public static class LLVMExtensions
             return result == 0;
         }
     }
+
+    public static LLVMTypeRef Ptr(this LLVMTypeRef Self, uint AddressSpace) => LLVMTypeRef.CreatePointer(Self, AddressSpace);
 }

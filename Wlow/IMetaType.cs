@@ -25,7 +25,10 @@ public interface IMetaType
 
 public static class MetaTypeHelper
 {
-    public static bool SameWith(this TupleMeta a, TupleMeta b) => a.AsBin() == b.AsBin();
+    public static bool SameWith<A, B>(this A a, B b)
+        where A : IMetaType
+        where B : IMetaType
+        => a.AsBin() == b.AsBin();
 
     public static bool Is<T>(this IMetaType type)
     where T : IMetaType

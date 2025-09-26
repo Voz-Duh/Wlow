@@ -1,0 +1,31 @@
+~include(tryer.mcs.api)
+
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public readonly partial struct PlaceHolderMetaType
+{
+  'op(Equals)
+  'op(NotEquals)
+  'op(Lower)
+  'op(Greater)
+  'op(LowerEquals)
+  'op(GreaterEquals)
+  
+  'op(BitwiseOr)
+  'op(BitwiseAnd)
+  'op(LogicalOr)
+  'op(LogicalAnd)
+  
+  'op(Add)
+  'op(Sub)
+  'op(Mul)
+  'op(Div)
+  'op(Mod)
+
+  'op(Shr)
+  'op(Shl)
+  'op(Ror)
+  'op(Rol)
+}

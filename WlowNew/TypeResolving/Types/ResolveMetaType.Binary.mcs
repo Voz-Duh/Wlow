@@ -1,0 +1,49 @@
+~define('op(type, name):
+  public IMetaType Operation'c('name)(Scope ctx, Info info
+    ~ifeq('type:bin)
+      , IMetaType right
+    ~endif
+    )
+    => Current.Operation'c('name)(ctx, info
+    ~ifeq('type:bin)
+      , right
+    ~endif
+    );
+)
+
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public partial class ResolveMetaType
+{
+  'op(bin, Equals)
+  'op(bin, NotEquals)
+  'op(bin, Lower)
+  'op(bin, Greater)
+  'op(bin, LowerEquals)
+  'op(bin, GreaterEquals)
+  
+  'op(bin, BitwiseOr)
+  'op(bin, BitwiseAnd)
+  'op(bin, LogicalOr)
+  'op(bin, LogicalAnd)
+  
+  'op(bin, Add)
+  'op(bin, Sub)
+  'op(bin, Mul)
+  'op(bin, Div)
+  'op(bin, Mod)
+
+  'op(bin, Shr)
+  'op(bin, Shl)
+  'op(bin, Ror)
+  'op(bin, Rol)
+
+  'op(one, Ref)
+  'op(one, Deref)
+  'op(one, Negate)
+  'op(one, Plus)
+  'op(one, Not)
+  'op(one, Inv)
+}

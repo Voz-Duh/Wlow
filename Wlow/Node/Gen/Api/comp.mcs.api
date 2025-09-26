@@ -9,7 +9,7 @@
   --- LLVMTypeRef b_lty
   --- LLVMValueRef b
   
-  'on(type, return BoolMeta.Get;)
+  'on(type, 'return_type(BoolMeta.Get);)
 
   'on(base,
     ~define('bool_cmp: 'if(BoolMeta, BoolMeta, return new(BoolMeta.Get, sc.bi.'iop (LLVM'isuf()Predicate.LLVM'isufo()'ido, a, b));))

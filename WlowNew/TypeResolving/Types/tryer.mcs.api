@@ -1,0 +1,4 @@
+~define('op(name):
+  public IMetaType Operation'c('name)(Scope ctx, Info info, IMetaType right)
+    => IMetaType.Operate(ctx, info, this, right).Start().Done(IMetaType.OpName.'name);
+)

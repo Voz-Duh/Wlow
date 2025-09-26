@@ -6,6 +6,17 @@ namespace LLVMSharp.Interop;
 
 public static class LLVMConst
 {
+    [DllImport("libLLVM", CallingConvention = CallingConvention.Cdecl, EntryPoint = "LLVMGetUndef", ExactSpelling = true)]
+    static extern unsafe LLVMOpaqueValue* LLVMGetUndef(LLVMOpaqueType* Ty);
+
+    public static LLVMValueRef CreateUndef(LLVMTypeRef Type)
+    {
+        unsafe
+        {
+            return LLVMGetUndef(Type);
+        }
+    }
+
     public static LLVMValueRef CreateBigIntConstant(LLVMTypeRef intType, BigInteger value)
     {
         unsafe

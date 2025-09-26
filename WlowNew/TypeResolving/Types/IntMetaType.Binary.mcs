@@ -1,0 +1,16 @@
+
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public readonly partial struct IntMetaType
+{
+  ~include(tryer.mcs.api)
+  'op(LogicalOr)
+  'op(LogicalAnd)
+
+  ~include(errorer.mcs.api)
+  'op(one, Ref)
+  'op(one, Deref)
+  'op(one, Not)
+}

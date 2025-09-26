@@ -8,29 +8,29 @@ public readonly partial record struct IntMeta {
   ~define('body:
     'if(IntMeta,
       'on(type,
-        if (type.bytes >= this.bytes)
+        if (type.bits >= this.bits)
           return to;
       )
       'on(cast,
-        if (type.bytes >= this.bytes)
+        if (type.bits >= this.bits)
           return sc.bi.BuildIntCast2(val, to.Type(sc), true);
       )
     )
   )
-  'implicits(body, i{bytes})
+  'implicits(body, i{bits})
 
   ~include(explicits.mcs.api)
   ~define('body:
     'if(IntMeta,
       'on(type,
-        if (type.bytes >= this.bytes)
+        if (type.bits >= this.bits)
           return to;
       )
       'on(cast,
-        if (type.bytes >= this.bytes)
+        if (type.bits >= this.bits)
           return sc.bi.BuildIntCast2(val, to.Type(sc), true);
       )
     )
   )
-  'explicits(body, bool)
+  'explicits(body, i{bits})
 }

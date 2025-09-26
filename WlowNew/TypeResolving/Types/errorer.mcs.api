@@ -1,0 +1,12 @@
+~define('op(type, name):
+  public IMetaType Operation'c('name)(Scope ctx, Info info
+    ~ifeq('type:bin)
+      , IMetaType right
+    ~endif
+    )
+    => throw IMetaType.OperateError(IMetaType.OpName.'name, info, this
+    ~ifeq('type:bin)
+      , right
+    ~endif
+    );
+)

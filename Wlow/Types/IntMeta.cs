@@ -2,13 +2,13 @@ using LLVMSharp.Interop;
 
 namespace Wlow.Types;
 
-public readonly partial record struct IntMeta(uint bytes, BinaryType bin) : IMetaType
+public readonly partial record struct IntMeta(uint bits, BinaryType bin) : IMetaType
 {
     public bool IsGeneric() => false;
     
-    public string Name(Scope sc) => $"i{bytes}";
+    public string Name(Scope sc) => $"i{bits}";
 
-    public LLVMTypeRef Type(Scope sc) => sc.ctx.GetIntType(bytes);
+    public LLVMTypeRef Type(Scope sc) => sc.ctx.GetIntType(bits);
 
     public void Binary(BinaryWriter writer) => writer.Write((byte)bin);
 }

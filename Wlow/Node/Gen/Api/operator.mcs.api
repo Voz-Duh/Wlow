@@ -1,30 +1,61 @@
 
+~define('i2s(v, ty):sc.bi.BuildIntCast2('v, 'ty, true))
+~define('i2u(v, ty):sc.bi.BuildIntCast2('v, 'ty, false))
+
 ~define('on(region, body):
   ~ifeq('region:'__region)
     'body
   ~endif
 )
 
-~define('if(left, right, body):
+~define('return_type(val):
   {
-    if (a_raw_ty.Is<'left >(out var a_ty)
-     && b_raw_ty.Is<'right>(out var b_ty))
-    {
-      'body
-    }
+    var __val = 'val;
+    return __val;
   }
 )
 
+--- BEGIN infix operator
 ~define('operator_infix(code, name):
+  --- BEGIN infix local API
+  ~define('if(left, right, body):
+    {
+      if (   a_raw_ty.Is<'left >(out var a_ty)
+          && b_raw_ty.Is<'right>(out var b_ty))
+      {
+        'body
+      }
+    }
+  )
+  --- END infix local API
+
   ~define('__region:type)
   public IMetaType Type(Scope sc)
   {
     var a_raw_ty = left.Type(sc);
     var b_raw_ty = right.Type(sc);
 
+    if (a_raw_ty is GenericLinkMeta __a__link)
+    {
+      __a__link.CurrentType = b_raw_ty;
+      return __a__link;
+    }
+
+    if (b_raw_ty is GenericLinkMeta __b__link)
+    {
+      __b__link.CurrentType = a_raw_ty;
+      return __b__link;
+    }
+
+    if (b_raw_ty.IsGeneric())
+      'return_type(a_raw_ty);
+
+    if (a_raw_ty.IsGeneric())
+      'return_type(b_raw_ty);
+
     'streval('code)
 
-    throw new CompileException(info, $"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+    throw new CompileException(info, $"'name is not supported for type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)}");
   }
 
   ~define('__region:base)
@@ -40,6 +71,47 @@
 
     'streval('code)
 
-    throw new CompileException(info, $"type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)} cannot be 'name");
+    throw new CompileException(info, $"'name is not supported for type {a_raw_ty.Name(sc)} and type {b_raw_ty.Name(sc)}");
   }
 )
+--- END infix operator
+
+--- BEGIN unary operator
+~define('operator_unary(code, name):
+  --- BEGIN unary local API
+  ~define('if(type, body):
+    {
+      if (raw_ty.Is<'type>(out var ty))
+      {
+        'body
+      }
+    }
+  )
+  --- END unary local API
+
+  ~define('__region:type)
+  public IMetaType Type(Scope sc)
+  {
+    var raw_ty = value.Type(sc);
+
+    if (raw_ty.IsGeneric())
+      'return_type(raw_ty);
+
+    'streval('code)
+
+    throw new CompileException(info, $"'name is not supported for type {raw_ty.Name(sc)}");
+  }
+
+  ~define('__region:base)
+  public LLVMValue Compile(Scope sc)
+  {
+    var raw_ty = value.Type(sc);
+    var lty = raw_ty.Type(sc);
+    var v = left.Compile(sc).Get(value.info, sc);
+
+    'streval('code)
+
+    throw new CompileException(info, $"'name is not supported for type {a_raw_ty.Name(sc)}");
+  }
+)
+--- END unary operator

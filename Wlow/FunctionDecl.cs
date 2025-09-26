@@ -137,10 +137,15 @@ public class FunctionDecl(
         var bin_type = new FunctionMeta(arg_types, VoidMeta.Get);
         var bin = bin_type.AsBin();
 
-        if (ResolvingStack.ContainsKey((UniqueNumber, bin)))
-            return new FunctionMeta(arg_types, GenericMeta.Get);
+        if (ResolvingStack.TryGetValue((UniqueNumber, bin), out var resolve))
+        {
+            if (resolve.type.arguments is null)
+                return new FunctionMeta(arg_types, GenericMeta.Get);
+            else
+                return resolve.type;
+        }
 
-        var (result_type, _, _) = CreateDefinition(sc, info, arg_types, type_only: true);
+        var (result_type, _, _) = CreateDefinition(sc, info, arg_types, type_only: true, bin_type, bin);
 
         return result_type;
     }
@@ -171,12 +176,12 @@ public class FunctionDecl(
             return new(definition.type.result, val: sc.bi.BuildCall2(definition.llvm_type, definition.llvm_value, call_args));
         }
 
-        var (result_type, llvm_func_type, llvm_func) = CreateDefinition(sc, info, arg_types, type_only: false);
+        var (result_type, llvm_func_type, llvm_func) = CreateDefinition(sc, info, arg_types, type_only: false, bin_type, bin);
 
         return new(result_type.result, val: sc.bi.BuildCall2(llvm_func_type, llvm_func, call_args));
     }
 
-    private FunctionDefinition CreateDefinition(Scope base_scope, Info info, IMetaType[] args, bool type_only)
+    private FunctionDefinition CreateDefinition(Scope base_scope, Info info, IMetaType[] args, bool type_only, FunctionMeta resolve_type, string resolve_bin)
     {
         var i = 0u;
         var real_args =
@@ -184,15 +189,13 @@ public class FunctionDecl(
                 .. SelectPairsNoFunctions(args, ref i, this.arguments, selector: v => v),
             ]);
 
-        var resolve_type = new FunctionMeta([.. real_args.Select(v => v.Value)], VoidMeta.Get);
-        var resolve_bin = resolve_type.AsBin();
-
         if (Definitions.TryGetValue(resolve_bin, out var defined) && defined.llvm_type.Handle != 0)
             return defined;
 
         i = 0u;
         var type_scope = new Scope(
             variables: new([.. FictiveVariablesFrom(new(SelectKeyValuePairs(args, ref i, this.arguments)))]),
+            base_scope.global_variables,
             ctx: base_scope.ctx,
             bi: default,
             mod: base_scope.mod,
@@ -204,7 +207,7 @@ public class FunctionDecl(
 
         Definitions[resolve_bin] = new(resolve_type, default, default);
 
-        var result_type = TryDo(info, resolve_bin, () => this.block.Type(type_scope));
+        var result_type = TryDo(info, resolve_bin, () => this.block.Type(type_scope)).Unwrap();
         if (result_type.Is<GenericMeta>())
             result_type = VoidMeta.Get;
 
@@ -238,11 +241,14 @@ public class FunctionDecl(
                     .. SelectVariablesFrom(args, ref i, func, bi, base_scope, this.arguments),
                 ]
             ),
+            base_scope.global_variables,
             ctx: base_scope.ctx,
             bi: bi,
             mod: base_scope.mod,
             fn: func
         );
+
+        Definitions[resolve_bin] = result;
 
         var ret = TryDo(info, resolve_bin, () => this.block.Compile(scope), definition: result, remove_resolver: true);
         try
@@ -253,8 +259,6 @@ public class FunctionDecl(
         {
             bi.BuildRetVoid();
         }
-
-        Definitions[resolve_bin] = result;
 
         return result;
     }

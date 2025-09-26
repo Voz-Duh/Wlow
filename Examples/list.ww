@@ -1,0 +1,44 @@
+
+-- mut marks that list is cannot be let, only mut
+type list = mut { data mut *?, cap i32, len i32 };
+
+impl list (&self:expand')
+= (
+    let last = self:cap;
+    let new =
+        if last==0
+            = 1
+        else
+            = last*2
+    ;;
+    self:cap = new;
+    self:data = (realloc'
+        self:data,
+        new * sizeof(*self:data)
+    ) -> mut *typeof(*self:data)
+);
+
+impl list (&self:push' value typeof(*self:data))
+= (
+    let ptr = (
+        if self:len >= self:cap
+            = self:expand'
+        else
+            = self:data
+    );
+    ptr[self:len] = value;
+    1+=self:len
+);
+
+impl list (self[i])
+= (
+    if i >= self.len
+        = log' "out of range" |> exit' 1
+    else
+        = &self.data[i]
+);
+
+-- error:
+-- let l = list { null, 0, 0};
+-- okay:
+mut l = list { null, 0, 0 };

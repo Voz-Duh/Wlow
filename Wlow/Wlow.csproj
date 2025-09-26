@@ -12,13 +12,16 @@
     <PackageReference Include="libLLVM" Version="20.1.2" />
     <PackageReference Include="LLVMSharp" Version="20.1.2" />
     <PackageReference Include="LLVMSharp.Interop" Version="20.1.2" />
-    <PackageReference Include="Sprache" Version="2.3.1" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="libLLVM.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WlowTypeResolver\WlowTypeResolver.csproj" />
   </ItemGroup>
   
 </Project>

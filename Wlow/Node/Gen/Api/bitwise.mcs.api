@@ -1,0 +1,31 @@
+
+~define('bitwise(op):
+  --- LLVMType a_raw_ty
+  --- MetaType a_meta
+  --- LLVMTypeRef a_lty
+  --- LLVMValueRef a
+  
+  --- LLVMType b_raw_ty
+  --- MetaType b_meta
+  --- LLVMTypeRef b_lty
+  --- LLVMValueRef b
+
+  ~defeval('op:'op)
+
+  ~define('for(a, b):
+    'if('a, 'b,
+      var is_a = a_ty.bits > b_ty.bits;
+      var to = is_a ? a_raw_ty : b_raw_ty;
+      'on(type, 'return_type(to);)
+      'on(base,
+        var to_llvm = is_a ? a_lty : b_lty;
+        return new(to, sc.bi.'op ('i2u(a, to_llvm), 'i2u(b, to_llvm)));
+      )
+    )
+  )
+
+  'for(IntMeta, IntMeta)
+  'for(IntMeta, UIntMeta)
+  'for(UIntMeta, IntMeta)
+  'for(UIntMeta, UIntMeta)
+)

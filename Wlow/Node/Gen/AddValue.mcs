@@ -8,6 +8,5 @@ namespace Wlow.Node;
 
 public readonly partial record struct AddValue {
   ~define('iop:BuildAdd)
-  ~define('icast(v, ty):BuildIntCast2('v, 'ty, true))
   'operator_infix(arith, addition)
 }

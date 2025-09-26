@@ -1,0 +1,35 @@
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public readonly partial struct BoolMetaType
+{
+  ~include(tryer.mcs.api)
+  'op(Lower)
+  'op(Greater)
+  'op(LowerEquals)
+  'op(GreaterEquals)
+  
+  'op(BitwiseOr)
+  'op(BitwiseAnd)
+  'op(LogicalOr)
+  'op(LogicalAnd)
+  
+  'op(Add)
+  'op(Sub)
+  'op(Mul)
+  'op(Div)
+  'op(Mod)
+
+  'op(Shr)
+  'op(Shl)
+  'op(Ror)
+  'op(Rol)
+
+  ~include(errorer.mcs.api)
+  'op(one, Ref)
+  'op(one, Deref)
+  'op(one, Negate)
+  'op(one, Plus)
+  'op(one, Inv)
+}

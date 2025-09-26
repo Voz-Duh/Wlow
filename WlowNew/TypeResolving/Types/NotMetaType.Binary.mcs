@@ -1,0 +1,38 @@
+~include(errorer.mcs.api)
+
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
+
+public readonly partial struct NotMetaType
+{
+  'op(bin, Equals)
+  'op(bin, NotEquals)
+  'op(bin, Lower)
+  'op(bin, Greater)
+  'op(bin, LowerEquals)
+  'op(bin, GreaterEquals)
+  
+  'op(bin, BitwiseOr)
+  'op(bin, BitwiseAnd)
+  'op(bin, LogicalOr)
+  'op(bin, LogicalAnd)
+  
+  'op(bin, Add)
+  'op(bin, Sub)
+  'op(bin, Mul)
+  'op(bin, Div)
+  'op(bin, Mod)
+
+  'op(bin, Shr)
+  'op(bin, Shl)
+  'op(bin, Ror)
+  'op(bin, Rol)
+
+  'op(one, Ref)
+  'op(one, Deref)
+  'op(one, Negate)
+  'op(one, Plus)
+  'op(one, Not)
+  'op(one, Inv)
+}

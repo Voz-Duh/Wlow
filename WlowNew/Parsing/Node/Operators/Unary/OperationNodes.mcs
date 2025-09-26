@@ -1,0 +1,36 @@
+
+~define('op(name, optext, soptext):
+  public readonly record struct 'c('name)Node(
+    Info Info,
+    INode Value) : INode
+  {
+    public INodeTypeResolved TypeResolve(Scope scope)
+    {
+      var value = Value.TypeResolve(scope);
+      var info = TypedValue.From(value.ValueTypeInfo.Type.Operation'c('name)(scope, Info));
+
+      return new 'c('name)NodeTypeResolved(Info, info, value);
+    }
+
+    public override string ToString() => $"('optext{Value}'soptext)";
+  }
+
+  public readonly record struct 'c('name)NodeTypeResolved(
+    Info Info,
+    TypedValue ValueTypeInfo,
+    INodeTypeResolved Value) : INodeTypeResolved
+  {
+    public override string ToString() => $"('optext{Value}'soptext)";
+  }
+)
+using Wlow.Shared;
+using Wlow.TypeResolving;
+
+namespace Wlow.Parsing;
+
+'op(Ref, &,)
+'op(Deref, *,)
+'op(Negate, -,)
+'op(Plus, +,)
+'op(Not, !,)
+'op(Inv, ~,)
