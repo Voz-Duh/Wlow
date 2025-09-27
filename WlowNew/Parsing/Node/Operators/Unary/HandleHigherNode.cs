@@ -14,7 +14,7 @@ public readonly record struct HandleHigherNode(Info Info, INode Value) : INode
         var toType = scope.HandleError();
 
         // value type must not be casted to toType,
-        // toType used only to generate new error! 
+        // toType used only to generate new error of correct type! 
         return new HandleHigherNodeTypeResolved(Info, new(value.ValueTypeInfo.Mutability, not.To), value, toType);
     }
 

@@ -81,7 +81,6 @@ public static class Pair
 }
 
 public class Mut<T>
-    where T : unmanaged
 {
     public T Value;
 
@@ -95,7 +94,7 @@ public class Mut<T>
 
 public static class Mut
 {
-    public static Mut<T> From<T>(T value) where T : unmanaged => Mut<T>.Create(value);
+    public static Mut<T> From<T>(T value) => Mut<T>.Create(value);
 }
 
 public readonly struct Monad<T>
@@ -119,6 +118,84 @@ public readonly struct Monad<T>
         monad.Effects.Push(effect);
         return monad;
     }
+}
+
+public readonly struct DMutex<T>
+{
+    readonly Mutex Mutex = new();
+    readonly Mut<T> Value;
+
+    public DMutex(T value) => Value = value;
+    public DMutex() => Value = Mut.From(default(T)!);
+
+    public Access Request()
+    {
+        Mutex.WaitOne();
+        return new(Value, Mutex);
+    }
+
+    /// <summary>
+    /// Use only on mutexes for unmanaged values 
+    /// </summary>
+    public T RequestValue()
+    {
+        Mutex.WaitOne();
+        var v = Value;
+        Mutex.ReleaseMutex();
+        return v;
+    }
+
+    public class Access(Mut<T> value, Mutex mutex)
+    {
+        readonly Mutex Mutex = mutex;
+        readonly Mut<T> Data = value;
+        bool Valid = true;
+
+        ~Access()
+        {
+            if (Valid) throw new AggregateException("access token was not doned");
+        }
+
+        public T Value
+        {
+            get
+            {
+                if (!Valid) throw new AggregateException("access token is outdated");
+                return Data;
+            }
+            set
+            {
+                if (!Valid) throw new AggregateException("access token is outdated");
+                Data.Value = value;
+            }
+        }
+
+        public Access Effect(Func<T, T> Function)
+        {
+            Value = Function(Value);
+            return this;
+        }
+
+        public R EffectResult<R>(Func<T, R> Function)
+        {
+            var res = Function(Value);
+            Done();
+            return res;
+        }
+
+        public T Done()
+        {
+            var v = Value;
+            Valid = false;
+            Mutex.ReleaseMutex();
+            return v;
+        }
+    }
+}
+
+public static class DMutex
+{
+    public static DMutex<T> From<T>(T Value) => new(Value);
 }
 
 public static class ExpTyHelper

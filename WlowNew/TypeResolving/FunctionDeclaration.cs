@@ -18,10 +18,10 @@ public class FunctionDeclaration(
     static Stack<Info>? CallingStackValue;
     static Stack<Info> CallingStack => CallingStackValue ??= [];
 
-    static readonly ConcurrentDictionary<BinaryType, FunctionDefinition> Definitions = [];
+    static readonly DMutex<Dictionary<BinaryType, DMutex<FunctionDefinition>>> Definitions = new([]);
 
-    static ID IdentifierGenerator = ID.NegOne;
-    public readonly ID Identifier = IdentifierGenerator = IdentifierGenerator.Inc();
+    static readonly DMutex<ID> IdentifierGenerator = DMutex.From(ID.NegOne);
+    public readonly ID Identifier = IdentifierGenerator.Request().Effect(v => v.Inc()).Done();
 
     readonly Info _info = info;
     readonly ImmutableArray<Pair<string, TypedValue>> _arguments = [.. arguments];
@@ -172,8 +172,19 @@ public class FunctionDeclaration(
                 .. SelectPairsNoFunctions(args, ref i, _arguments, selector: v => v.Type),
             ]);
 
-        if (Definitions.TryGetValue(resolve_bin, out var defined))
-            return defined;
+        var definitonsResolve =
+            Definitions.Request()
+            .EffectResult<Or<FunctionDefinition, DMutex<FunctionDefinition>.Access>>(def =>
+            {
+                if (def.TryGetValue(resolve_bin, out var defined))
+                    return defined.RequestValue();
+
+                var mutex = DMutex.From(new FunctionDefinition());
+                def[resolve_bin] = mutex;
+                return mutex.Request();
+            });
+        if (definitonsResolve.UnwrapValue1(out var def)) return def;
+        var definitionToken = definitonsResolve.Unwrap(v => default!, v => v);
 
         i = 0;
         var type_scope = Scope.FictiveVariables(new(SelectKeyValuePairs(args, ref i, _arguments)));
@@ -193,7 +204,7 @@ public class FunctionDeclaration(
             result_resolved = new NeverResultNodeTypeResolved(_body.Info, result_resolved);
         }
 
-        return new FunctionDefinition(
+        var definition = new FunctionDefinition(
             result_resolved,
             new FunctionMetaType(
                 result_type,
@@ -201,6 +212,11 @@ public class FunctionDeclaration(
                 declaration: this
             )
         );
+
+        definitionToken.Value = definition;
+        definitionToken.Done();
+
+        return definition;
     }
     private static IEnumerable<TypedValue> SelectFunctionsResolved(
         ImmutableArray<TypedValue> collection)

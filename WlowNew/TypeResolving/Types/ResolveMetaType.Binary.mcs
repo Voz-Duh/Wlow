@@ -4,7 +4,7 @@
       , IMetaType right
     ~endif
     )
-    => Current.Operation'c('name)(ctx, info
+    => Current = Current.Operation'c('name)(ctx, info
     ~ifeq('type:bin)
       , right
     ~endif

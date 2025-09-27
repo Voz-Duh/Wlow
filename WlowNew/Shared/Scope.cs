@@ -105,10 +105,4 @@ public readonly struct Scope
             new(fictiveVariables.Select(v => KeyValuePair.Create(v.Key, new Variable(VariableAbility.StoreRead, v.Value ?? default)))),
             Mut.From(false)
         );
-
-    // public Scope Variables(Dictionary<string, ITypedValue> variables)
-    // {
-    //     Console.WriteLine(string.Join("\n", variables.Select(v => $"{v.Key} {v.Value.Type.Name}")));
-    //     return default;
-    // }
 }
