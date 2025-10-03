@@ -18,6 +18,7 @@ public partial interface IMetaType
   'op(Mul)
   'op(Div)
   'op(Mod)
+  'op(Xor)
   'op(Shr)
   'op(Shl)
   'op(Ror)

@@ -7,7 +7,7 @@ public partial class ASTGen
 {
     static Pair<string, TypedValue> Argument(Token ctx, ReadOnlySpan<Token> inner)
         => ManualTokens.Create(ctx, inner).Start(
-            OnEmpty: tok => throw CompilationException.Create(tok.info, "function argument is cannot be empty"),
+            OnEmpty: (ref _, tok) => throw CompilationException.Create(tok.info, "function argument is cannot be empty"),
             Do: (ref toks) =>
             {
                 var mutability = toks.Switch(
@@ -17,12 +17,12 @@ public partial class ASTGen
                     (TokenType.Mut, (ref _, _) => Mutability.Mutate)
                 );
 
-                static Token nameRequired(Token tok)
+                static Token nameRequired(ref ManualTokens _, Token tok)
                     => throw CompilationException.Create(tok.info, "function argument must have a name");
                 var name = toks.Get(
                     Token: TokenType.Ident,
                     Else: nameRequired,
-                    Fail: (ref _, tok) => nameRequired(tok),
+                    Fail: nameRequired,
                     Success: (ref _, ctx) => ctx
                 );
 

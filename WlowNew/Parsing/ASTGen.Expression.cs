@@ -117,7 +117,7 @@ Precedence      Operator
             bool delimiter = false;
             bool _continue = toks.Switch(
                 // no delimiter = uncontinue
-                Else: _ => false,
+                Else: (ref _, _) => false,
                 // no delimiter, but some token = err
                 Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
                 // basic delimiter = node continue rule

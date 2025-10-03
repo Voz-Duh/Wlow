@@ -24,6 +24,7 @@ public partial class ResolveMetaType
   'op(bin, LowerEquals)
   'op(bin, GreaterEquals)
   
+  'op(bin, Xor)
   'op(bin, BitwiseOr)
   'op(bin, BitwiseAnd)
   'op(bin, LogicalOr)
@@ -46,4 +47,5 @@ public partial class ResolveMetaType
   'op(one, Plus)
   'op(one, Not)
   'op(one, Inv)
+  'op(one, On)
 }

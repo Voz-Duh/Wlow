@@ -23,4 +23,5 @@ public static class CompilationExceptionList
     public static CompilationException ExpressionInvalid(Info info) => CompilationException.Create(info, "invalid expression");
     public static CompilationException ExpressionContinue(Info info) => CompilationException.Create(info, "completed expression was unexpectedly continued, did you miss ';' or ';;'?");
     public static CompilationException ValueCannotBeEmpty(Info info) => CompilationException.Create(info, "value cannot be empty");
+    public static CompilationException Expected(Info info, string name) => CompilationException.Create(info, $"{name} was expected here");
 }

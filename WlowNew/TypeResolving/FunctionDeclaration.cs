@@ -183,8 +183,10 @@ public class FunctionDeclaration(
                 def[resolve_bin] = mutex;
                 return mutex.Request();
             });
-        if (definitonsResolve.UnwrapValue1(out var def)) return def;
-        var definitionToken = definitonsResolve.Unwrap(v => default!, v => v);
+        if (definitonsResolve.UnwrapInline(
+                out var def,
+                out var definitionToken))
+            return def;
 
         i = 0;
         var type_scope = Scope.FictiveVariables(new(SelectKeyValuePairs(args, ref i, _arguments)));
@@ -193,15 +195,23 @@ public class FunctionDeclaration(
         var resolved_args = (ImmutableArray<TypedValue>)[.. SelectFunctionsResolved(args)];
 
         var result_resolved = TryDo(info, resolve_bin, () => _body.TypeResolve(type_scope));
-        var result_type = result_resolved.ValueTypeInfo.Type;
+        var result_type = result_resolved.ValueTypeInfo.Type.Unwrap();
 
         if (result_type.Mutability == Mutability.Mutate)
             throw CompilationException.Create(info, "mutable only type is cannot be returned");
 
-        if (result_type.Unwrap() is PlaceHolderMetaType)
+        if (result_type is PlaceHolderMetaType)
         {
             result_type = NeverMetaType.Get;
             result_resolved = new NeverResultNodeTypeResolved(_body.Info, result_resolved);
+        }
+
+        if (result_type is NotMetaType not)
+            type_scope.FinalizeErrorType(not.To);
+        else if (type_scope.IsError)
+        {
+            type_scope.FinalizeErrorType(result_type);
+            result_type = NotMetaType.Get(result_type);
         }
 
         var definition = new FunctionDefinition(

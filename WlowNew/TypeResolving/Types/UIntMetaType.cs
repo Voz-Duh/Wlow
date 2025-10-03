@@ -2,19 +2,19 @@ using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
-public readonly partial struct IntMetaType : IMetaType
+public readonly partial struct UIntMetaType : IMetaType
 {
-    public static readonly IntMetaType Get8 = new(8, BinaryTypeRepr.Int8);
-    public static readonly IntMetaType Get16 = new(16, BinaryTypeRepr.Int16);
-    public static readonly IntMetaType Get32 = new(32, BinaryTypeRepr.Int32);
-    public static readonly IntMetaType Get64 = new(64, BinaryTypeRepr.Int64);
+    public static readonly UIntMetaType Get8 = new(8, BinaryTypeRepr.UInt8);
+    public static readonly UIntMetaType Get16 = new(16, BinaryTypeRepr.UInt16);
+    public static readonly UIntMetaType Get32 = new(32, BinaryTypeRepr.UInt32);
+    public static readonly UIntMetaType Get64 = new(64, BinaryTypeRepr.UInt64);
 
     public readonly uint Bits;
     readonly BinaryTypeRepr Repr;
 
-    public IntMetaType() => throw new NotSupportedException("use getters");
+    public UIntMetaType() => throw new NotSupportedException("use getters");
 
-    IntMetaType(uint bits, BinaryTypeRepr repr)
+    UIntMetaType(uint bits, BinaryTypeRepr repr)
     {
         Bits = bits;
         Repr = repr;
@@ -22,7 +22,7 @@ public readonly partial struct IntMetaType : IMetaType
 
     public ID TypeID => ID.Zero;
 
-    public string Name => $"i{Bits}";
+    public string Name => $"u{Bits}";
 
     public Mutability Mutability => Mutability.Copy;
 
@@ -43,13 +43,8 @@ public readonly partial struct IntMetaType : IMetaType
                 : null
         );
 
-    public static IntMetaType GetGreater(IntMetaType a, IntMetaType b)
-        => a.Bits < b.Bits ? b : a;
-
     public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
         => throw IMetaType.CastError(info, this, to);
-
-    public IMetaType OperationNegate(Scope ctx, Info info) => this;
 
     public IMetaType OperationPlus(Scope ctx, Info info) => this;
 

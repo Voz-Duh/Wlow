@@ -21,6 +21,8 @@ public enum TokenType
     Lower, Greater,
     Set,
     NumberLeftDotted, Number,
+    // TODO rename NumberLeftDotted -> LDNum
+    // TODO split Number to: INum(-\d+) UNum(\d+) FNum(\d+.\d*)
     Dot, Not,
     Mul, Div,
     Add, Sub,
@@ -31,9 +33,11 @@ public enum TokenType
     BitwiseAnd,
     PlaceHolder,
     Int8, Int16, Int32, Int64,
+    Fail,
     Let, Mut,
     Type, Function,
-    If, Else,
+    In,
+    If, Elif, Else,
     Packed,
     Ident,
     Newline,
@@ -94,11 +98,14 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 |(\bi16\b)    (?# i16 )
 |(\bi32\b)    (?# i32 )
 |(\bi64\b)    (?# i64 )
+|(\bfail\b)   (?# fail )
 |(\blet\b)    (?# let )
 |(\bmut\b)    (?# mut )
 |(\btype\b)   (?# type )
 |(\bfn\b)     (?# function )
+|(\bin\b)     (?# in )
 |(\bif\b)     (?# if )
+|(\belif\b)   (?# elif )
 |(\belse\b)   (?# else )
 |(\bpacked\b) (?# packed )
 |(\b[\p{L}_][\p{L}\p{Nd}_]*\b) (?# ident )

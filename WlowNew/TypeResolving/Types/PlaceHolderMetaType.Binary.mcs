@@ -13,6 +13,7 @@ public readonly partial struct PlaceHolderMetaType
   'op(LowerEquals)
   'op(GreaterEquals)
   
+  'op(Xor)
   'op(BitwiseOr)
   'op(BitwiseAnd)
   'op(LogicalOr)

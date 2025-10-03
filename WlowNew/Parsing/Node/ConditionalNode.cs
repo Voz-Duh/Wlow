@@ -15,25 +15,35 @@ public readonly record struct ConditionalNode(
         cond.ValueTypeInfo.Type.ImplicitCast(scope, Cond.Info, BoolMetaType.Get);
 
         var _if = If.TypeResolve(scope.New);
+        var ifNever = _if.ValueTypeInfo.Type.Unwrap() is NeverMetaType;
         var _else = Else.TypeResolve(scope.New);
+        var elseNever = _else.ValueTypeInfo.Type.Unwrap() is NeverMetaType;
 
         bool ifRoot;
         IMetaType type;
-        try
+        if (ifNever || elseNever)
         {
-            ifRoot = true;
-            type = _else.ValueTypeInfo.Type.ImplicitCast(scope, Else.Info, _if.ValueTypeInfo.Type);
+            ifRoot = elseNever;
+            type = elseNever ? _if.ValueTypeInfo.Type : _else.ValueTypeInfo.Type;
         }
-        catch
+        else
         {
-            ifRoot = false;
-            type = _if.ValueTypeInfo.Type.ImplicitCast(scope, Else.Info, _else.ValueTypeInfo.Type);
+            try
+            {
+                ifRoot = true;
+                type = _else.ValueTypeInfo.Type.ImplicitCast(scope, Else.Info, _if.ValueTypeInfo.Type);
+            }
+            catch
+            {
+                ifRoot = false;
+                type = _if.ValueTypeInfo.Type.ImplicitCast(scope, Else.Info, _else.ValueTypeInfo.Type);
+            }
         }
 
-        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(type), cond, _if, _else);
+        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(type), cond, ifNever, _if, elseNever, _else);
     }
 
-    public override string ToString() => $"if {Cond} = {If} else = {Else}";
+    public override string ToString() => $"if {Cond} = {If}; else = {Else}";
 }
 
 public readonly record struct ConditionalNodeTypeResolved(
@@ -41,8 +51,10 @@ public readonly record struct ConditionalNodeTypeResolved(
     bool IfRoot,
     TypedValue ValueTypeInfo,
     INodeTypeResolved Cond,
+    bool IfIsNever,
     INodeTypeResolved If,
+    bool ElseIsNever,
     INodeTypeResolved Else) : INodeTypeResolved
 {
-    public override string ToString() => $"if {Cond} = {If} else = {Else}";
+    public override string ToString() => $"{(IfIsNever ? "--: never :-- " : "")}if {Cond} = {If}; {(ElseIsNever ? "--: never :-- " : "")}else = {Else}";
 }

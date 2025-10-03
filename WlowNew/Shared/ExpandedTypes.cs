@@ -65,6 +65,9 @@ public readonly struct Or<T1, T2>
         return !v1.Has;
     }
 
+    public bool UnwrapInline([MaybeNullWhen(false)] out T1 res1, [MaybeNullWhen(true)] out T2 res2)
+        => (res2 = v2).Return(v1.Unwrap(out res1));
+
     public static Or<T1, T2> Create(T1 val) => new(val, default!);
     public static Or<T1, T2> Create(T2 val) => new(default, val);
 
@@ -205,4 +208,5 @@ public static class ExpTyHelper
     public static Nothing Ignore<T>(this T _) => Nothing.Value;
     public static U Return<T, U>(this T _, U result) => result;
     public static T Effect<T, U>(this T result, U _) => result;
+    public static U Map<T, U>(this T result, Func<T, U> func) => func(result);
 }

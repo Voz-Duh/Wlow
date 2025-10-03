@@ -13,4 +13,5 @@ public partial interface IMetaType
   'op(Plus)
   'op(Not)
   'op(Inv)
+  'op(On)
 }

@@ -27,4 +27,11 @@ public readonly partial struct NotMetaType : IMetaType
 
     public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
         => throw IMetaType.CastError(info, this, to);
+
+    public IMetaType OperationOn(Scope ctx, Info info)
+    {
+        // TODO return tuple (bool, To, array(u8))
+        // XMPL: return TupleMetaType.From(BoolMetaType.Get, To, Array.To(UIntMetaType.Get8));
+        throw new NotImplementedException();
+    }
 }

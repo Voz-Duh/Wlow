@@ -128,6 +128,7 @@ public partial interface IMetaType
         public const string Mul = "multiplication";
         public const string Div = "division";
         public const string Mod = "modulo";
+        public const string Xor = "bitwise xor";
         public const string BitwiseOr = "bitwise or";
         public const string BitwiseAnd = "bitwise and";
         public const string LogicalOr = "logical or";
@@ -142,5 +143,6 @@ public partial interface IMetaType
         public const string Plus = "plus";
         public const string Not = "logical not";
         public const string Inv = "bitwise inversion";
+        public const string On = "on";
     }
 }

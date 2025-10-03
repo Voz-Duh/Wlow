@@ -6,6 +6,7 @@ using Wlow.Shared;
 
 using NodeOrEffect = Wlow.Shared.Or<Wlow.Parsing.INode, System.Func<Wlow.Parsing.INode, Wlow.Parsing.INode>>;
 using OptEffect = Wlow.Shared.Opt<System.Func<Wlow.Parsing.INode, Wlow.Parsing.INode>>;
+using System.Linq.Expressions;
 
 namespace Wlow.Parsing;
 
@@ -20,7 +21,7 @@ public partial class ASTGen
             After: (ref toks, tok) =>
             {
                 var startEnds = toks.Switch(
-                    Else: _ => false,
+                    Else: (ref _, _) => false,
                     Default: (ref _, tok) => false,
                     (TokenType.Delimiter, (ref _, _) => true),
                     (TokenType.ContinueDelimiter, (ref _, _) => true)
@@ -32,29 +33,35 @@ public partial class ASTGen
                 }
 
                 var args = new List<INode>();
-                do
-                {
-                    var node = Expression(ref toks, CommaEnd: true);
-                    var (ends, delimiter) = toks.Switch(
-                        // no comma = end
-                        Else: _ => (true, false),
-                        // no comma, but some token = err
-                        Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
-                        // basic delimiter = continue
-                        (TokenType.Delimiter, (ref _, _) => (true, true)),
-                        // continue delimiter = end
-                        (TokenType.ContinueDelimiter, (ref _, _) => (true, true)),
-                        // comma = continue
-                        (TokenType.Comma, (ref _, _) => (false, false))
-                    );
-                    args.Add(node);
-                    if (ends)
+                if (toks.Switch(
+                    Else: (ref toks, _) => false.Effect(toks.StepIgnore()),
+                    Default: (ref toks, _) => true.Effect(toks.StepIgnore()),
+                    (TokenType.Delimiter, (ref _, _) => false),
+                    (TokenType.ContinueDelimiter, (ref _, _) => false),
+                    (TokenType.Comma, (ref toks, _) => false)
+                ).Effect(toks.StepBack()))
+                    while (true)
                     {
-                        if (delimiter) toks.StepBack();
-                        break;
+                        var node = Expression(ref toks, CommaEnd: true);
+                        var (ends, delimiter) = toks.Switch(
+                            // no comma = end
+                            Else: (ref _, _) => (true, false),
+                            // no comma, but some token = err
+                            Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
+                            // basic delimiter = end
+                            (TokenType.Delimiter, (ref _, _) => (true, true)),
+                            // continue delimiter = end
+                            (TokenType.ContinueDelimiter, (ref _, _) => (true, true)),
+                            // comma = continue
+                            (TokenType.Comma, (ref _, _) => (false, false))
+                        );
+                        args.Add(node);
+                        if (ends)
+                        {
+                            if (delimiter) toks.StepBack();
+                            break;
+                        }
                     }
-                }
-                while (true);
                 return (tok.info, args: args.ToImmutableArray());
             },
             Fail: (ref toks, tok) => Nothing.Value
@@ -171,7 +178,7 @@ public partial class ASTGen
     static INode ExpressionUnaryAdapter(Token ctx, ReadOnlySpan<Token> toks)
     {
         var inner = ManualTokens.Create(ctx, toks);
-        return inner.Start(tok => default!, ExpressionUnary);
+        return inner.Start((ref _, tok) => default!, ExpressionUnary);
     }
 
     static INode ExpressionUnary(ref ManualTokens toks)
@@ -181,7 +188,7 @@ public partial class ASTGen
         Monad<INode> prefix = new();
         while (
             toks.Switch(
-                Else: tok => throw CompilationException.Create(tok.info, "unexpected expression end"),
+                Else: (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
                 Default: (ref toks, tok) => NodeOrEffect.Create(ExpressionAtomic(ref toks)),
                 (TokenType.Sub,
                     (ref toks, tok) => NodeOrEffect.Create(v => new NegateNode(tok.info, v))),
@@ -203,12 +210,24 @@ public partial class ASTGen
         Monad<INode> suffix = new();
         while (
             toks.Switch(
-                Else: tok => OptEffect.Hasnt(),
+                Else: (ref _, tok) => OptEffect.Hasnt(),
                 Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
+                (TokenType.Mul,
+                    (ref toks, tok) => OptEffect.From(v => new DerefNode(tok.info, v))),
                 (TokenType.PlaceHolder,
                     (ref toks, tok) => OptEffect.From(v => new HandleHigherNode(tok.info, v))),
                 (TokenType.Not,
-                    (ref toks, tok) => OptEffect.From(v => new HandlePanicNode(tok.info, v)))
+                    (ref toks, tok) => OptEffect.From(v => new HandlePanicNode(tok.info, v))),
+                (TokenType.NumberLeftDotted,
+                    (ref toks, tok) => OptEffect.From(v => new AccessIndexNode(tok.info, v, int.Parse(tok.value.AsSpan()[1..])))),
+                (TokenType.Dot,
+                    (ref toks, dot) => toks.Switch(
+                        (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
+                        (ref _, tok) => throw CompilationExceptionList.Expected(tok.info, "field name"),
+                        (TokenType.Ident,
+                            (ref toks, tok) => OptEffect.From(v => new AccessNameNode(dot.info, v, tok.value)))
+                        // TODO unsigned integer literal as index
+                    ))
             )
             .Unwrap(false, effect => (suffix >>> effect).Return(true))) ;
 
@@ -217,17 +236,36 @@ public partial class ASTGen
 
     static INode ExpressionAtomic(ref ManualTokens toks)
         => toks.Switch(
-            Else: tok => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
+            Else: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
             Default: (ref toks, tok) => throw CompilationExceptionList.ExpressionInvalid(tok.info),
             (TokenType.Ident, (ref toks, tok) => new IdentNode(tok.info, tok.value)),
             (TokenType.Number, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
+            (TokenType.In, (ref toks, tok) => {
+                static string error(ref ManualTokens _, Token tok)
+                    => throw CompilationExceptionList.Expected(tok.info, "variable name");
+                var name = toks.Get(
+                    TokenType.Ident,
+                    Else: error,
+                    Fail: error,
+                    Success: (ref _, tok) => tok.value
+                );
+                // TODO setter operators support
+                return new InNode(tok.info, name);
+            }),
+            (TokenType.Fail, (ref toks, tok) => {
+                // TODO a real fail, with message, optional data etc
+                return new FailNode(tok.info, new IntegerNode(tok.info, 1, IntMetaType.Get8));
+            }),
             (TokenType.Bracket, (ref toks, tok) =>
             {
                 var inner = ManualTokens.Create(tok, tok.inner);
-                return inner.Start(
-                    OnEmpty: tok => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
-                    Do: (ref toks) => Expression(ref toks, FullScoped: true)
-                );
+                return new ScopeNode(
+                    tok.info,
+                    inner.Start(
+                        OnEmpty: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
+                        Do: (ref toks) => Expression(ref toks, FullScoped: true)
+                    )
+                ) as INode;
             })
         );
 }

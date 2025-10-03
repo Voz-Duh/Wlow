@@ -7,7 +7,6 @@ public ref struct ManualTokens
 {
     public static ManualTokens Create(Token Context, ReadOnlySpan<Token> Tokens) => new(Context, Tokens);
 
-    public delegate T FailStep<T>(Token token);
     public delegate T Step<T>(ref ManualTokens tokens, Token token);
     public delegate T DoFunction<T>(ref ManualTokens tokens);
     public delegate T SplitedStep<T>(ReadOnlySpan<Token> tokens, Token token);
@@ -25,19 +24,19 @@ public ref struct ManualTokens
         i = 0;
     }
 
-    readonly bool Overflow => i >= end;
+    public readonly bool Overflow => i >= end;
     public readonly Token Current => Tokens[i];
     public readonly bool Moved => i != start;
     public readonly Token Context => i == 0 | Tokens.Length == 0 ? BaseContext : Overflow ? Tokens[^1] : Tokens[i - 1];
 
-    readonly T ElseCompute<T>(FailStep<T>? Else) => Else is null ? default! : Else.Invoke(Context);
+    T ElseCompute<T>(Step<T>? Else) => Else is null ? default! : Else.Invoke(ref this, Context);
 
     public readonly ReadOnlySpan<Token> AllRightIncludeCurrent() => Tokens[i..];
     public readonly ReadOnlySpan<Token> AllRight() => Tokens[(i + 1)..];
 
     public Nothing ToEnd() => (i = end).Ignore();
 
-    public T Get<T>(TokenType Token, FailStep<T>? Else, Step<T> Fail, Step<T> Success)
+    public T Get<T>(TokenType Token, Step<T>? Else, Step<T> Fail, Step<T> Success)
     {
         if (Overflow) return ElseCompute(Else);
         var cur = Current;
@@ -52,7 +51,7 @@ public ref struct ManualTokens
         return Fail(ref this, cur);
     }
 
-    public T Switch<T>(FailStep<T>? Else, Step<T> Default, params IEnumerable<(TokenType type, Step<T> get)> Matches)
+    public T Switch<T>(Step<T>? Else, Step<T> Default, params IEnumerable<(TokenType type, Step<T> get)> Matches)
     {
         if (Overflow) return ElseCompute(Else);
         var cur = Current;
@@ -89,8 +88,7 @@ public ref struct ManualTokens
         }
         i = back;
 
-        var fail = Fail(ref this, Context);
-        return fail;
+        return Fail(ref this, Context);
     }
 
     public Or<(TSuccess value, TAfter after), TFail> UntilWithNot<TSuccess, TAfter, TFail>(
@@ -117,10 +115,10 @@ public ref struct ManualTokens
         }
         i = back;
 
-        var fail = Fail(ref this, Context);
-        return fail;
+        return Fail(ref this, Context);
     }
 
+    public Nothing StepIgnore() => i++.Return(Nothing.Value);
     public Nothing StepBack() => i--.Return(Nothing.Value);
 
     public readonly void Done(Action<Token> Fail)
@@ -129,10 +127,10 @@ public ref struct ManualTokens
     }
 
     public T Start<T>(
-        FailStep<T> OnEmpty,
+        Step<T> OnEmpty,
         DoFunction<T> Do)
     {
-        if (Overflow) return OnEmpty(Context);
+        if (Overflow) return OnEmpty(ref this, Context);
 
         var last = start;
 

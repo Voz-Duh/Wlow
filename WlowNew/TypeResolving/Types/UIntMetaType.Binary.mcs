@@ -3,7 +3,7 @@ using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
-public readonly partial struct IntMetaType
+public readonly partial struct UIntMetaType
 {
   ~include(tryer.mcs.api)
   'op(LogicalOr)
@@ -12,6 +12,7 @@ public readonly partial struct IntMetaType
   ~include(errorer.mcs.api)
   'op(one, Ref)
   'op(one, Deref)
+  'op(one, Negate)
   'op(one, Not)
   'op(one, On)
   
@@ -33,13 +34,13 @@ public readonly partial struct IntMetaType
   'op(GreaterEquals)
 
   ~define('greater:(a, b) => a.Bits < b.Bits ? b : a)
-  ~define('inter:(a, b) => a.Bits <= b.Bits ? b : a)
+  ~define('inter:(a, b) => a.Bits < b.Bits ? b : a)
   ~define('op(name):
     public IMetaType Operation'name(Scope ctx, Info info, IMetaType right)
       => IMetaType.Operate(ctx, info, this, right)
         .Start()
-        .On<IntMetaType>('greater)
-        .On<UIntMetaType>('inter)
+        .On<IntMetaType>('inter)
+        .On<UIntMetaType>('greater)
         .Done(IMetaType.OpName.'name);
   )
   

@@ -30,4 +30,5 @@ public readonly partial struct PlaceHolderMetaType : IMetaType
     public IMetaType OperationPlus(Scope _, Info __) => this;
     public IMetaType OperationNot(Scope _, Info __) => this;
     public IMetaType OperationInv(Scope _, Info __) => this;
+    public IMetaType OperationOn(Scope _, Info __) => this;
 }

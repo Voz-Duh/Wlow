@@ -24,6 +24,7 @@ public readonly partial struct FunctionMetaType
   'op(bin, Div)
   'op(bin, Mod)
 
+  'op(bin, Xor)
   'op(bin, Shr)
   'op(bin, Shl)
   'op(bin, Ror)
@@ -35,4 +36,5 @@ public readonly partial struct FunctionMetaType
   'op(one, Plus)
   'op(one, Not)
   'op(one, Inv)
+  'op(one, On)
 }

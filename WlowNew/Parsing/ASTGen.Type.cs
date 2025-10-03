@@ -8,7 +8,7 @@ public partial class ASTGen
 {
     static IMetaType Type(Token ctx, ref ManualTokens toks, bool optional = false)
         => toks.Start(
-            OnEmpty: tok => optional ? PlaceHolderMetaType.Get : throw CompilationException.Create(ctx.info, "type is cannot be empty"),
+            OnEmpty: (ref _, tok) => optional ? PlaceHolderMetaType.Get : throw CompilationException.Create(ctx.info, "type is cannot be empty"),
             Do: (ref toks) =>
                 toks.Switch<IMetaType>(
                     Else: null,

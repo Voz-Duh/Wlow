@@ -13,6 +13,7 @@ public readonly partial struct NeverMetaType
   'op(bin, LowerEquals)
   'op(bin, GreaterEquals)
   
+  'op(bin, Xor)
   'op(bin, BitwiseOr)
   'op(bin, BitwiseAnd)
   'op(bin, LogicalOr)
@@ -35,4 +36,5 @@ public readonly partial struct NeverMetaType
   'op(one, Plus)
   'op(one, Not)
   'op(one, Inv)
+  'op(one, On)
 }

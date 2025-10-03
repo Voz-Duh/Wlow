@@ -28,7 +28,7 @@ public partial class ASTGen
     {
         (Token, IMetaType?) self(ref ManualTokens toks, Token tok) =>
             toks.Start(
-                OnEmpty: tok => throw CompilationException.Create(tok.info, RequiredName),
+                OnEmpty: (ref _, tok) => throw CompilationException.Create(tok.info, RequiredName),
                 Do: (ref toks) =>
                 {
                     var name = toks.Get(TokenType.Ident,
@@ -47,7 +47,8 @@ public partial class ASTGen
 
         var (left, value) = Scoped<(Token, IMetaType?), INode?, ((Token, IMetaType?), INode?)>(
             ref toks,
-            Self: (toks, tok) => {
+            Self: (toks, tok) =>
+            {
                 var inner = ManualTokens.Create(tok, toks);
                 return self(ref inner, tok);
             },
@@ -87,7 +88,7 @@ public partial class ASTGen
 
         var (arguments, body) = Scoped(
             ref toks,
-            Self: (toks, tok) => Token.LeftSplit(tok, toks, [TokenType.Comma], Argument),
+            Self: (toks, tok) => toks.IsEmpty ? [] : Token.LeftSplit(tok, toks, [TokenType.Comma], Argument),
             Scope: (ref toks, tok) => Expression(ref toks),
             NoScope: (ref toks, tok) => Nothing.From(() => throw CompilationException.Create(tok.info, "function body is not defined"))
         ).Unwrap(v => v, v => default);
@@ -95,7 +96,7 @@ public partial class ASTGen
         return new FunctionValueNode(info, arguments, body);
     }
 
-    static INode IfElse(ref ManualTokens toks)
+    static INode IfElse(ref ManualTokens toks, string Name="if")
     {
         Info info = toks.Context.info;
 
@@ -105,20 +106,24 @@ public partial class ASTGen
             Scope: (ref toks, tok) =>
             {
                 var If = Expression(ref toks, EatDelimiter: false);
-                toks.Get(TokenType.Else,
-                    Else: tok => throw CompilationExceptionList.UnexpectedEnd(tok.info),
-                    Fail: (ref _, tok) => throw CompilationException.Create(tok.info, "if operator must contain else branch after self"),
-                    Success: (ref _, _) => Nothing.Value
+                var Else = toks.Switch(
+                    Else: (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
+                    Default: (ref _, tok) => throw CompilationException.Create(tok.info, $"{Name} operator must contain else branch after self"),
+                    (TokenType.Elif, (ref toks, _) => IfElse(ref toks, "elif")),
+                    (TokenType.Else, (ref toks, _) =>
+                    {
+                        toks.Get(TokenType.Set,
+                            Else: (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
+                            Fail: (ref _, tok) => throw CompilationException.Create(tok.info, "else body is not defined"),
+                            Success: (ref _, _) => Nothing.Value
+                        );
+                        return Expression(ref toks, CommaEnd: true);
+                    }
+                )
                 );
-                toks.Get(TokenType.Set,
-                    Else: tok => throw CompilationExceptionList.UnexpectedEnd(tok.info),
-                    Fail: (ref _, tok) => throw CompilationException.Create(tok.info, "else body is not defined"),
-                    Success: (ref _, _) => Nothing.Value
-                );
-                var Else = Expression(ref toks, CommaEnd: true);
                 return (If, Else);
             },
-            NoScope: (ref toks, tok) => Nothing.From(() => throw CompilationException.Create(tok.info, "if body is not defined"))
+            NoScope: (ref toks, tok) => Nothing.From(() => throw CompilationException.Create(tok.info, $"{Name} body is not defined"))
         ).Unwrap(v => v, v => default);
 
         return new ConditionalNode(info, Cond, If, Else);
@@ -126,9 +131,9 @@ public partial class ASTGen
 
     static (bool, INode) ExpressionUndelimited(ref ManualTokens toks)
         => toks.Start(
-            OnEmpty: tok => throw CompilationException.Create(tok.info, "value is cannot be empty"),
+            OnEmpty: (ref _, tok) => throw CompilationException.Create(tok.info, "value is cannot be empty"),
             (ref toks) => toks.Switch(
-                Else: tok => default, // unreachable
+                Else: (ref _, tok) => default, // unreachable
                 Default: (ref toks, tok) => (Continue: false, ExpressionUnstructured(ref toks)),
 
                 (TokenType.If, (ref toks, tok) => (Continue: false, IfElse(ref toks))),
