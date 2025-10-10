@@ -14,15 +14,19 @@ public enum TokenType
     Call,
     ContinueDelimiter, Delimiter,
     Comma,
+    SetAdd, SetSub,
+    SetMul, SetDiv,
+    SetMod, SetXor,
+    SetRor, SetRol,
+    SetShr, SetShl,
+    SetBitwiseOr, SetBitwiseAnd,
     Cast,
     Ror, Rol,
     Shr, Shl,
     LowerEquals, GreaterEquals,
     Lower, Greater,
     Set,
-    NumberLeftDotted, Number,
-    // TODO rename NumberLeftDotted -> LDNum
-    // TODO split Number to: INum(-\d+) UNum(\d+) FNum(\d+.\d*)
+    LDNum, INum, UNum, FNum,
     Dot, Not,
     Mul, Div,
     Add, Sub,
@@ -69,6 +73,18 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 |(;;) (?# continue delimiter )
 |(;)  (?# delimiter )
 |(,)  (?# comma )
+|(\+=)  (?# set add )
+|(-=)   (?# set sub )
+|(\*=)  (?# set mul )
+|(\/=)  (?# set div )
+|(%=)   (?# set mod )
+|(\^=)  (?# set xor )
+|(>>>=) (?# set ror )
+|(<<<=) (?# set rol )
+|(>>=)  (?# set shr )
+|(<<=)  (?# set shl )
+|(\|=)  (?# set bitwise or )
+|(&=)   (?# set bitwise and )
 |(->) (?# cast )
 |(>>>)  (?# ror )
 |(<<<)  (?# rol )
@@ -79,8 +95,8 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 |(<)  (?# lower )
 |(>)  (?# greater )
 |(=)  (?# set )
-|(\.\d+)       (?# number left dotted )
-|-?(\d+\.?\d*) (?# number )
+(?# nums )
+|(\.\d+)|(-\d+)|(\d+)|(\d+.\d*)
 |(\.)   (?# dot )
 |(\!)   (?# not )
 |(\*)   (?# mul )

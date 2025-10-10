@@ -12,6 +12,11 @@ public readonly record struct SetNode(
     {
         var acceptor = Acceptor.TypeResolve(scope.Isolated);
         var value = Value.TypeResolve(scope.Isolated);
+        
+        if (!acceptor.ValueTypeInfo.Type.Convention(scope) << TypeConvention.Set)
+        {
+            throw CompilationException.Create(Acceptor.Info, $"type {acceptor.ValueTypeInfo.Type} of left side is not suitable to be assigned");
+        }
 
         return new SetNodeTypeResolved(Info, acceptor.ValueTypeInfo, acceptor, value);
     }
@@ -26,4 +31,6 @@ public readonly record struct SetNodeTypeResolved(
     INodeTypeResolved Value) : INodeTypeResolved
 {
     public override string ToString() => $"{Acceptor} = {Value}";
+    public INodeTypeResolved TypeFixation()
+        => new SetNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Acceptor.TypeFixation(), Value.TypeFixation());
 }

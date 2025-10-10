@@ -6,13 +6,11 @@ public readonly partial struct NeverMetaType : IMetaType
 {
     public static readonly NeverMetaType Get = default;
 
-    public ID TypeID => ID.Zero;
+    public string Name => "never";
+    public TypeMutability Mutability(Scope ctx) => TypeMutability.Const;
+    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.Return;
 
-    public string Name => $"never";
-
-    public Mutability Mutability => Mutability.Copy;
-
-    public void Binary(BinaryTypeBuilder bin) =>
+    public Nothing Binary(BinaryTypeBuilder bin) =>
         bin.Push(BinaryTypeRepr.Never);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)

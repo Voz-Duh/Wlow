@@ -75,12 +75,7 @@ let i = id 5;
 -- but cannnot be mutable:
 -- err: mut j = id 5;
 
--- mutable type:
-mut type id = ?;
-mut i = id 5;
--- it's okay, let type can be mutable
--- but cannnot be immutable:
--- err: let j = id 5;
+-- mutable types was in concept but will not be added because it's just not useful and strange
 
 -- mutable argument:
 let inc = fn mut a = a += 1;

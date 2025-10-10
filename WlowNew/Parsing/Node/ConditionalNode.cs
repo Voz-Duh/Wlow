@@ -40,7 +40,7 @@ public readonly record struct ConditionalNode(
             }
         }
 
-        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(type), cond, ifNever, _if, elseNever, _else);
+        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(scope, type), cond, ifNever, _if, elseNever, _else);
     }
 
     public override string ToString() => $"if {Cond} = {If}; else = {Else}";
@@ -56,5 +56,7 @@ public readonly record struct ConditionalNodeTypeResolved(
     bool ElseIsNever,
     INodeTypeResolved Else) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new ConditionalNodeTypeResolved(Info, IfRoot, ValueTypeInfo.Fixate(), Cond.TypeFixation(), IfIsNever, If.TypeFixation(), ElseIsNever, Else.TypeFixation());
     public override string ToString() => $"{(IfIsNever ? "--: never :-- " : "")}if {Cond} = {If}; {(ElseIsNever ? "--: never :-- " : "")}else = {Else}";
 }

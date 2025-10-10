@@ -33,5 +33,4 @@ public readonly partial struct BoolMetaType
   'op(one, Negate)
   'op(one, Plus)
   'op(one, Inv)
-  'op(one, On)
 }

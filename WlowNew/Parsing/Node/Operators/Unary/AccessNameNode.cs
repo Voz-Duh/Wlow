@@ -9,7 +9,7 @@ public readonly record struct AccessNameNode(Info Info, INode Value, string Name
     {
         var value = Value.TypeResolve(scope);
 
-        value.ValueTypeInfo.Type.AccessName(Info, Name);
+        value.ValueTypeInfo.Type.AccessName(scope, Info, Name);
 
         return new AccessNameNodeTypeResolved(Info, value.ValueTypeInfo, value, Name);
     }
@@ -23,5 +23,8 @@ public readonly record struct AccessNameNodeTypeResolved(
     INodeTypeResolved Value,
     string Name) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new AccessNameNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Value.TypeFixation(), Name);
+
     public override string ToString() => $"({Value}).{Name}";
 }

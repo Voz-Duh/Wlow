@@ -1,19 +1,30 @@
+using System.Collections.Immutable;
 using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
 public partial interface IMetaType
 {
-    ID TypeID { get; }
     string Name { get; }
-    Mutability Mutability { get; }
+    TypeMutability Mutability(Scope ctx);
+    Flg<TypeConvention> Convention(Scope ctx);
 
     IMetaType ImplicitCast(Scope ctx, Info info, IMetaType to);
     IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to);
     IMetaType TemplateCast(Scope ctx, Info info, IMetaType to);
 
-    IMetaType AccessIndex(Info info, int index) => throw CompilationException.Create(info, $"{Name} type does not support '{index}' field access");
-    IMetaType AccessName(Info info, string name) => throw CompilationException.Create(info, $"{Name} type does not support '{name}' field access");
+    IMetaType AccessIndex(Scope ctx, Info info, int index)
+        => throw CompilationExceptionList.NoFieldSupport(info, Name, index);
+    IMetaType AccessName(Scope ctx, Info info, string name)
+        => throw CompilationExceptionList.NoFieldSupport(info, Name, name);
+    IMetaType IndexAddressation(Scope ctx, Info info, IMetaType index)
+        => throw CompilationExceptionList.NoIndexAddressation(info, Name);
 
-    void Binary(BinaryTypeBuilder bin);
+    bool Callable(Scope ctx) => false;
+    FunctionDefinition Call(Scope ctx, Info info, ImmutableArray<(Info Info, TypedValue Value)> args)
+        => throw CompilationExceptionList.Uncallable(info, Name);
+
+    Nothing Binary(BinaryTypeBuilder bin);
+
+    IMetaType? FixateFn() => null;
 }

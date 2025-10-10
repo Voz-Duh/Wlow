@@ -10,6 +10,7 @@
       var left = Left.TypeResolve(scope);
       var right = Right.TypeResolve(scope);
       var info = TypedValue.From(
+          scope,
           left.ValueTypeInfo.Type.Operation'c('name)(scope, Info, right.ValueTypeInfo.Type)
       );
 
@@ -25,6 +26,9 @@
     INodeTypeResolved Left,
     INodeTypeResolved Right) : INodeTypeResolved
   {
+    public INodeTypeResolved TypeFixation()
+      => new 'c('name)NodeTypeResolved(Info, ValueTypeInfo.Fixate(), Left.TypeFixation(), Right.TypeFixation());
+
     public override string ToString() => $"({Left} 'optext {Right})";
   }
 )

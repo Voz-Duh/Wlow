@@ -12,9 +12,9 @@ public partial class ASTGen
             {
                 var mutability = toks.Switch(
                     Else: null,
-                    Default: (ref _, _) => Mutability.Copy,
-                    (TokenType.Let, (ref _, _) => Mutability.Const),
-                    (TokenType.Mut, (ref _, _) => Mutability.Mutate)
+                    Default: (ref _, _) => TypeMutability.Copy,
+                    (TokenType.Let, (ref _, _) => TypeMutability.Const),
+                    (TokenType.Mut, (ref _, _) => TypeMutability.Mutate)
                 );
 
                 static Token nameRequired(ref ManualTokens _, Token tok)

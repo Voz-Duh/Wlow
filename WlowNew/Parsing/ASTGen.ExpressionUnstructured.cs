@@ -6,71 +6,135 @@ using Wlow.Shared;
 
 using NodeOrEffect = Wlow.Shared.Or<Wlow.Parsing.INode, System.Func<Wlow.Parsing.INode, Wlow.Parsing.INode>>;
 using OptEffect = Wlow.Shared.Opt<System.Func<Wlow.Parsing.INode, Wlow.Parsing.INode>>;
-using System.Linq.Expressions;
 
 namespace Wlow.Parsing;
 
 public partial class ASTGen
 {
-    static INode ExpressionUnstructured(ref ManualTokens toks)
-    {
-        var res = toks.UntilWithNot(
-            [TokenType.Call],
-            [TokenType.Delimiter, TokenType.ContinueDelimiter],
-            Success: (toks, tok) => ExpressionBinary(tok, toks),
-            After: (ref toks, tok) =>
-            {
-                var startEnds = toks.Switch(
-                    Else: (ref _, _) => false,
-                    Default: (ref _, tok) => false,
-                    (TokenType.Delimiter, (ref _, _) => true),
-                    (TokenType.ContinueDelimiter, (ref _, _) => true)
-                );
-                if (startEnds)
-                {
-                    toks.StepBack();
-                    return (tok.info, []);
-                }
+    static Func<INode, INode> SetterEffect(Token tok, INode expr)
+        => v => tok.type switch
+        {
+            TokenType.Set => expr,
+            TokenType.SetAdd => new AddNode(tok.info, v, expr),
+            TokenType.SetSub => new SubNode(tok.info, v, expr),
+            TokenType.SetMul => new MulNode(tok.info, v, expr),
+            TokenType.SetDiv => new DivNode(tok.info, v, expr),
+            TokenType.SetMod => new ModNode(tok.info, v, expr),
+            TokenType.SetXor => new XorNode(tok.info, v, expr),
+            TokenType.SetRor => new RorNode(tok.info, v, expr),
+            TokenType.SetRol => new RolNode(tok.info, v, expr),
+            TokenType.SetShr => new ShrNode(tok.info, v, expr),
+            TokenType.SetShl => new ShlNode(tok.info, v, expr),
+            TokenType.SetBitwiseOr => new BitwiseOrNode(tok.info, v, expr),
+            TokenType.SetBitwiseAnd => new BitwiseAndNode(tok.info, v, expr),
+            _ => throw new NotSupportedException(),
+        };
 
-                var args = new List<INode>();
-                if (toks.Switch(
-                    Else: (ref toks, _) => false.Effect(toks.StepIgnore()),
-                    Default: (ref toks, _) => true.Effect(toks.StepIgnore()),
-                    (TokenType.Delimiter, (ref _, _) => false),
-                    (TokenType.ContinueDelimiter, (ref _, _) => false),
-                    (TokenType.Comma, (ref toks, _) => false)
-                ).Effect(toks.StepBack()))
-                    while (true)
-                    {
-                        var node = Expression(ref toks, CommaEnd: true);
-                        var (ends, delimiter) = toks.Switch(
-                            // no comma = end
-                            Else: (ref _, _) => (true, false),
-                            // no comma, but some token = err
-                            Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
-                            // basic delimiter = end
-                            (TokenType.Delimiter, (ref _, _) => (true, true)),
-                            // continue delimiter = end
-                            (TokenType.ContinueDelimiter, (ref _, _) => (true, true)),
-                            // comma = continue
-                            (TokenType.Comma, (ref _, _) => (false, false))
-                        );
-                        args.Add(node);
-                        if (ends)
-                        {
-                            if (delimiter) toks.StepBack();
-                            break;
-                        }
-                    }
-                return (tok.info, args: args.ToImmutableArray());
-            },
-            Fail: (ref toks, tok) => Nothing.Value
+    static INode SetterIdent(INode v) => v;
+
+    static Func<INode, INode>? ParseForSetterEffect(ref ManualTokens toks)
+        => toks.Any<Func<INode, INode>?>(
+            [TokenType.Set,
+             TokenType.SetAdd,    TokenType.SetSub,
+             TokenType.SetMul,    TokenType.SetDiv,
+             TokenType.SetMod,    TokenType.SetXor,
+             TokenType.SetRor,    TokenType.SetRol,
+             TokenType.SetShr,    TokenType.SetShl,
+             TokenType.SetBitwiseOr, TokenType.SetBitwiseAnd],
+            Else: (ref _, _) => null,
+            After: (ref toks, tok) => SetterEffect(tok, Expression(ref toks, CommaEnd: true)),
+            Fail: (ref _, tok) => null
         );
 
-        if (res.UnwrapValue1(out var succ))
+    static INode ExpressionUnstructured(ref ManualTokens toks)
+    {
+#region Setters
         {
-            return new CallNode(succ.after.info, succ.value, succ.after.args);
+            var res = toks.UntilWithNot<INode, (Token tok, Func<INode, INode> effect), Nothing>(
+                [TokenType.Set,
+                 TokenType.SetAdd,    TokenType.SetSub,
+                 TokenType.SetMul,    TokenType.SetDiv,
+                 TokenType.SetMod,    TokenType.SetXor,
+                 TokenType.SetRor,    TokenType.SetRol,
+                 TokenType.SetShr,    TokenType.SetShl,
+                 TokenType.SetBitwiseOr, TokenType.SetBitwiseAnd],
+                [TokenType.Delimiter, TokenType.ContinueDelimiter],
+                Success: (toks, tok) => ExpressionBinary(tok, toks),
+                After: (ref toks, tok) => {
+                    var expr = Expression(ref toks, CommaEnd: true);
+                    return (tok, SetterEffect(tok, expr));
+                },
+                Fail: (ref toks, tok) => Nothing.Value
+            );
+
+            if (res.UnwrapInline(out var succ, out var _))
+            {
+                return new SetNode(succ.after.tok.info, succ.value, succ.after.effect(succ.value));
+            }
         }
+#endregion Setters
+
+#region Function Call
+        {
+            var res = toks.UntilWithNot(
+                [TokenType.Call],
+                [TokenType.Delimiter, TokenType.ContinueDelimiter],
+                Success: (toks, tok) => ExpressionBinary(tok, toks),
+                After: (ref toks, tok) =>
+                {
+                    var startEnds = toks.Switch(
+                        Else: (ref _, _) => false,
+                        Default: (ref _, tok) => false,
+                        (TokenType.Delimiter, (ref _, _) => true),
+                        (TokenType.ContinueDelimiter, (ref _, _) => true)
+                    );
+                    if (startEnds)
+                    {
+                        toks.StepBack();
+                        return (tok.info, []);
+                    }
+
+                    var args = new List<INode>();
+                    if (toks.Switch(
+                        Else: (ref toks, _) => false.Effect(toks.StepIgnore()),
+                        Default: (ref toks, _) => true.Effect(toks.StepIgnore()),
+                        (TokenType.Delimiter, (ref _, _) => false),
+                        (TokenType.ContinueDelimiter, (ref _, _) => false),
+                        (TokenType.Comma, (ref toks, _) => false)
+                    ).Effect(toks.StepBack()))
+                        while (true)
+                        {
+                            var node = Expression(ref toks, CommaEnd: true);
+                            var (ends, delimiter) = toks.Switch(
+                                // no comma = end
+                                Else: (ref _, _) => (true, false),
+                                // no comma, but some token = err
+                                Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
+                                // basic delimiter = end
+                                (TokenType.Delimiter, (ref _, _) => (true, true)),
+                                // continue delimiter = end
+                                (TokenType.ContinueDelimiter, (ref _, _) => (true, true)),
+                                // comma = continue
+                                (TokenType.Comma, (ref _, _) => (false, false))
+                            );
+                            args.Add(node);
+                            if (ends)
+                            {
+                                if (delimiter) toks.StepBack();
+                                break;
+                            }
+                        }
+                    return (tok.info, args: args.ToImmutableArray());
+                },
+                Fail: (ref toks, tok) => Nothing.Value
+            );
+
+            if (res.UnwrapInline(out var succ, out var _))
+            {
+                return new CallNode(succ.after.info, succ.value, succ.after.args);
+            }
+        }
+#endregion Function Call
 
         var var = toks.Until(
             /* comma is here because only two types of expressions is provided:
@@ -208,6 +272,29 @@ public partial class ASTGen
             )) ;
 
         Monad<INode> suffix = new();
+        OptEffect dotsuffix(ref ManualTokens toks, Token dot)
+            => toks.Switch(
+                (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
+                (ref _, tok) => throw CompilationExceptionList.Expected(tok.info, "field name"),
+                (TokenType.Ident,
+                    (ref toks, tok) => OptEffect.From(v => new AccessNameNode(dot.info, v, tok.value))),
+                (TokenType.UNum,
+                    (ref toks, tok) => OptEffect.From(v => new AccessIndexNode(tok.info, v, int.Parse(tok.value)))),
+                (TokenType.FNum, (ref toks, tok) =>
+                {
+                    var parts = tok.value.Split('.');
+                    var left = parts[0];
+                    var right = parts[1];
+                    Func<INode, INode> effect;
+                    if (right.Length == 0)
+                        effect = dotsuffix(ref toks, tok).Unwrap(null!, eff => eff);
+                    else
+                        effect = v => new AccessIndexNode(tok.info, v, int.Parse(right));
+                    return OptEffect.From(
+                        v => effect(new AccessIndexNode(tok.info, v, int.Parse(left)))
+                    );
+                }));
+
         while (
             toks.Switch(
                 Else: (ref _, tok) => OptEffect.Hasnt(),
@@ -218,16 +305,9 @@ public partial class ASTGen
                     (ref toks, tok) => OptEffect.From(v => new HandleHigherNode(tok.info, v))),
                 (TokenType.Not,
                     (ref toks, tok) => OptEffect.From(v => new HandlePanicNode(tok.info, v))),
-                (TokenType.NumberLeftDotted,
+                (TokenType.LDNum,
                     (ref toks, tok) => OptEffect.From(v => new AccessIndexNode(tok.info, v, int.Parse(tok.value.AsSpan()[1..])))),
-                (TokenType.Dot,
-                    (ref toks, dot) => toks.Switch(
-                        (ref _, tok) => throw CompilationExceptionList.UnexpectedEnd(tok.info),
-                        (ref _, tok) => throw CompilationExceptionList.Expected(tok.info, "field name"),
-                        (TokenType.Ident,
-                            (ref toks, tok) => OptEffect.From(v => new AccessNameNode(dot.info, v, tok.value)))
-                        // TODO unsigned integer literal as index
-                    ))
+                (TokenType.Dot, dotsuffix)
             )
             .Unwrap(false, effect => (suffix >>> effect).Return(true))) ;
 
@@ -235,25 +315,33 @@ public partial class ASTGen
     }
 
     static INode ExpressionAtomic(ref ManualTokens toks)
-        => toks.Switch(
+        => toks.Switch<INode>(
             Else: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
             Default: (ref toks, tok) => throw CompilationExceptionList.ExpressionInvalid(tok.info),
             (TokenType.Ident, (ref toks, tok) => new IdentNode(tok.info, tok.value)),
-            (TokenType.Number, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
+            (TokenType.UNum, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
+            (TokenType.INum, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
             (TokenType.In, (ref toks, tok) => {
-                static string error(ref ManualTokens _, Token tok)
+                static (Info, string) error(ref ManualTokens _, Token tok)
                     => throw CompilationExceptionList.Expected(tok.info, "variable name");
-                var name = toks.Get(
+                var (name_info, name) = toks.Get(
                     TokenType.Ident,
                     Else: error,
                     Fail: error,
-                    Success: (ref _, tok) => tok.value
+                    Success: (ref _, tok) => (tok.info, tok.value)
                 );
-                // TODO setter operators support
-                return new InNode(tok.info, name);
+
+                var effect = ParseForSetterEffect(ref toks);
+                INode jump = new InNode(tok.info, name);
+                
+                return effect is not null
+                    ? new DelimitedStepsNode(
+                        [effect(new IdentNode(name_info, name))],
+                        jump)
+                    : jump;
             }),
             (TokenType.Fail, (ref toks, tok) => {
-                // TODO a real fail, with message, optional data etc
+                // TODO fail with message, optional data etc what i cna imagine
                 return new FailNode(tok.info, new IntegerNode(tok.info, 1, IntMetaType.Get8));
             }),
             (TokenType.Bracket, (ref toks, tok) =>

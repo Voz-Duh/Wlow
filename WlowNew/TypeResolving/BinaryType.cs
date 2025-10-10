@@ -9,7 +9,14 @@ public readonly struct BinaryType(string repr)
 {
     readonly string repr = repr;
 
+    public override bool Equals(object? obj)
+        => obj is BinaryType binary
+        ? this == binary
+        : repr.Equals(obj);
+
     public override int GetHashCode() => repr.GetHashCode();
+    public static bool operator ==(BinaryType a, BinaryType b) => a.repr == b.repr;
+    public static bool operator !=(BinaryType a, BinaryType b) => a.repr != b.repr;
     public override string ToString()
     {
         unsafe

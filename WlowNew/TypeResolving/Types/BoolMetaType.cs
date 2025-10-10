@@ -6,13 +6,12 @@ public readonly partial struct BoolMetaType : IMetaType
 {
     public static readonly BoolMetaType Get = default;
 
-    public ID TypeID => ID.Zero;
 
     public string Name => "bool";
+    public TypeMutability Mutability(Scope ctx) => TypeMutability.Copy;
+    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.Any;
 
-    public Mutability Mutability => Mutability.Copy;
-
-    public void Binary(BinaryTypeBuilder bin) =>
+    public Nothing Binary(BinaryTypeBuilder bin) =>
         bin.Push(BinaryTypeRepr.Bool);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)

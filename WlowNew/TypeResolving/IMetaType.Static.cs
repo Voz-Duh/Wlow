@@ -32,7 +32,7 @@ public partial interface IMetaType
         to = to.Unwrap();
 
         if (wraped is ResolveMetaType)
-            wraper = wraped.PreUnwrap();
+            wraper = wraped.PreUnwrap(ctx);
 
         IMetaType? result = cast(from, to) ?? throw CastError(info, from, to);
         wraper?.Current = result;

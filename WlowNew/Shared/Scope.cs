@@ -1,40 +1,53 @@
-using Wlow.Parsing;
 using Wlow.TypeResolving;
 
 namespace Wlow.Shared;
 
-[Flags]
 public enum VariableAbility
 {
     None,
-    Jump,
-    StoreRead,
+    Jump = 1 << 0,
+    StoreRead = 1 << 1,
     Full = Jump | StoreRead
 }
 
-public readonly record struct Variable(VariableAbility Ability, TypedValue Value)
+public readonly record struct Variable(Flg<VariableAbility> Ability, TypedValue Value)
 {
-    public Variable Include(VariableAbility ability) => new(Ability | ability, Value);
-    public Variable Exclude(VariableAbility ability) => new(Ability & ~ability, Value);
+    public Variable Include(VariableAbility ability) => new(Ability + ability, Value);
+    public Variable Exclude(VariableAbility ability) => new(Ability - ability, Value);
 }
 
 public readonly struct Scope
 {
+    public readonly static Scope Empty = new(null!, Fictive: true);
+
     readonly Dictionary<string, Variable> Variables;
-    readonly ResolveMetaType ErrorTypeTo = new();
-    readonly Mut<bool> ErrorScope = Mut.From(false);
-    public bool IsError => ErrorScope.Value;
+    readonly ResolveMetaType ErrorTypeTo;
+    readonly Mut<bool> ErrorScope;
 
-    public Scope()
+    public bool IsError => ErrorScope;
+
+    public Scope() => throw new InvalidOperationException("Use Scope.Create to create a new scope");
+
+    Scope(Dictionary<string, Variable> variables, bool Fictive = false)
     {
-        Variables = [];
+        if (Fictive)
+        {
+            Variables = null!;
+            ErrorTypeTo = null!;
+            ErrorScope = null!;
+        }
+        else
+        {
+            Variables = variables;
+            ErrorTypeTo = new();
+            ErrorScope = Mut.From(false);
+        }
     }
 
-    Scope(Dictionary<string, Variable> variables, Mut<bool> errorScope)
-    {
-        Variables = variables;
-        ErrorScope = errorScope;
-    }
+    Scope(Dictionary<string, Variable> variables, Mut<bool> errorScope) : this(variables)
+        => ErrorScope = errorScope;
+    
+    public static Scope Create() => new([]);
 
     public void FinalizeErrorType(IMetaType type)
         => ErrorTypeTo.Current = type;
@@ -45,8 +58,11 @@ public readonly struct Scope
         return ErrorTypeTo;
     }
 
-    public TypedValue CreateVariable(Info info, Mutability mutability, string name, IMetaType type)
+    public TypedValue CreateVariable(Info info, TypeMutability mutability, string name, IMetaType type)
     {
+        if (!type.Convention(this) << TypeConvention.InitVariable)
+            throw CompilationException.Create(info, $"type {type.Name} is not suitable to be a variable type");
+
         var res = new Variable(VariableAbility.Full, new(mutability, type));
         if (!Variables.TryAdd(name, res))
         {
@@ -68,11 +84,11 @@ public readonly struct Scope
     {
         if (!Variables.TryGetValue(name, out var variable))
         {
-            throw CompilationException.Create(info, $"variable {name} was not been defined");
+            throw CompilationException.Create(info, $"variable {name} is not defined");
         }
 
-        if (!variable.Ability.HasFlag(VariableAbility.StoreRead))
-            throw CompilationException.Create(info, $"{name} is not a variable with value");
+        if (!variable.Ability << VariableAbility.StoreRead)
+            throw CompilationException.Create(info, $"{name} is a label, not a variable");
 
         return variable.Value;
     }
@@ -81,11 +97,11 @@ public readonly struct Scope
     {
         if (!Variables.TryGetValue(name, out var variable))
         {
-            throw CompilationException.Create(info, $"variable {name} was not been defined");
+            throw CompilationException.Create(info, $"variable {name} is not defined");
         }
 
-        if (!variable.Ability.HasFlag(VariableAbility.Jump))
-            throw CompilationException.Create(info, $"variable {name} is cannot be used to jump here");
+        if (!variable.Ability << VariableAbility.Jump)
+            throw CompilationException.Create(info, $"variable {name} is not suitable to be a jump label");
     }
 
     public Scope Copy(VariableAbility Include = VariableAbility.None, VariableAbility Exclude = VariableAbility.None)

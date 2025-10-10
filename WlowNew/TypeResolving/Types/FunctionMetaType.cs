@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Wlow.Parsing;
 using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
@@ -19,22 +20,30 @@ public readonly partial struct FunctionMetaType(
         }
     }
 
-    public ID TypeID => Declaration.Identifier;
     public IMetaType Result { get; init; } = result;
     public ImmutableArray<TypedValue> Arguments { get; init; } = arguments!.Value;
 
     public string Name => $"(fn {string.Join(", ", Arguments)} -> {Result.Name})";
-    public Mutability Mutability => Mutability.Const;
+    public TypeMutability Mutability(Scope ctx) => TypeMutability.Const;
+    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.InitVariable;
 
-    public void Binary(BinaryTypeBuilder bin)
+    public Nothing Binary(BinaryTypeBuilder bin)
     {
         bin.Push(BinaryTypeRepr.FunctionStart);
         if (_declaration is not null)
-            bin.Push(TypeID);
+            bin.Push(Declaration.Identifier);
         Result.Binary(bin);
         foreach (var arg in Arguments)
             arg.Type.Binary(bin);
         bin.Push(BinaryTypeRepr.FunctionEnd);
+        return Nothing.Value;
+    }
+
+    public FunctionDefinition Call(Scope ctx, Info info, ImmutableArray<(Info Info, TypedValue Value)> args)
+    {
+        var definition = Declaration.ResolveCall(ctx, info, args);
+
+        return definition;
     }
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)

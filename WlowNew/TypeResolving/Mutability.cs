@@ -1,20 +1,20 @@
 namespace Wlow.TypeResolving;
 
-public enum Mutability
+public enum TypeMutability
 {
     PlaceHolder,
     Copy,
-    Mutate,
-    Const
+    Const,
+    // use only to define variables
+    Mutate
 }
 
 public static class MutabilityHelper
 {
-    public static string GetString(this Mutability mutability)
+    public static string GetString(this TypeMutability mutability)
         => mutability switch
         {
-            Mutability.Const => "let ",
-            Mutability.Mutate => "mut ",
+            TypeMutability.Const => "let ",
             _ => "",
         };
 }

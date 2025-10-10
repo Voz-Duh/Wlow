@@ -140,7 +140,7 @@ print('--- processing...')
 cwd = os.getcwd()
 for e, f, ff in s:
  print(f'--- file: {f}')
- result = subprocess.run(e, cwd=cwd, shell=True, capture_output=True, text=True)
+ result = subprocess.run(e, cwd=cwd, capture_output=True, text=True)
  # all GPP messages is "errors"
  lines = result.stderr.split('\n')
  for l in lines:

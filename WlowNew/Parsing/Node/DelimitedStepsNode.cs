@@ -26,6 +26,8 @@ public readonly record struct DelimitedStepsNode(ImmutableArray<INode> Steps, IN
 public readonly record struct DelimitedStepsNodeTypeResolved(ImmutableArray<INodeTypeResolved> Steps, INodeTypeResolved Final) : INodeTypeResolved
 {
     public TypedValue ValueTypeInfo => Final.ValueTypeInfo;
+    public INodeTypeResolved TypeFixation()
+        => new DelimitedStepsNodeTypeResolved([.. Steps.Select(s => s.TypeFixation())], Final.TypeFixation());
 
     public override string ToString() => $"({string.Join("; ", Steps)}; {Final})";
 }

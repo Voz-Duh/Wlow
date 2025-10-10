@@ -9,7 +9,7 @@ public readonly record struct AccessIndexNode(Info Info, INode Value, int Index)
     {
         var value = Value.TypeResolve(scope);
 
-        value.ValueTypeInfo.Type.AccessIndex(Info, Index);
+        value.ValueTypeInfo.Type.AccessIndex(scope, Info, Index);
 
         return new AccessIndexNodeTypeResolved(Info, value.ValueTypeInfo, value, Index);
     }
@@ -23,5 +23,8 @@ public readonly record struct AccessIndexNodeTypeResolved(
     INodeTypeResolved Value,
     int Index) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new AccessIndexNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Value.TypeFixation(), Index);
+
     public override string ToString() => $"({Value}).{Index}";
 }

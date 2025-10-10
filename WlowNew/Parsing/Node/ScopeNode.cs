@@ -18,6 +18,8 @@ public readonly record struct ScopeNode(Info Info, INode Value) : INode
 public readonly record struct ScopeNodeTypeResolved(INodeTypeResolved Value) : INodeTypeResolved
 {
     public TypedValue ValueTypeInfo => Value.ValueTypeInfo;
+    public INodeTypeResolved TypeFixation()
+        => new ScopeNodeTypeResolved(Value.TypeFixation());
 
     public override string ToString() => $"(--: new scope :-- {Value})";
 }

@@ -13,7 +13,6 @@ public readonly partial struct IntMetaType
   'op(one, Ref)
   'op(one, Deref)
   'op(one, Not)
-  'op(one, On)
   
   ~define('op(name):
     ~define('bool:(a, b) => BoolMetaType.Get)

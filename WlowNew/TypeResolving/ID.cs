@@ -1,11 +1,15 @@
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
 [StructLayout(LayoutKind.Explicit, Pack = 8, Size = 32)]
 public readonly struct ID
 {
+    static readonly DMutex<ID> IdentifierGenerator = DMutex.From(ID.NegOne);
+    public static ID Unqiue => IdentifierGenerator.Request().Effect(v => v.Inc()).Done();
+
     [FieldOffset(0)]
     readonly ulong a;
     [FieldOffset(8)]

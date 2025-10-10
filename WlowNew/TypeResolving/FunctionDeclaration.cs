@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using Wlow.Shared;
 using Wlow.Parsing;
-using System.Collections.Concurrent;
 
 namespace Wlow.TypeResolving;
 
@@ -19,9 +18,7 @@ public class FunctionDeclaration(
     static Stack<Info> CallingStack => CallingStackValue ??= [];
 
     static readonly DMutex<Dictionary<BinaryType, DMutex<FunctionDefinition>>> Definitions = new([]);
-
-    static readonly DMutex<ID> IdentifierGenerator = DMutex.From(ID.NegOne);
-    public readonly ID Identifier = IdentifierGenerator.Request().Effect(v => v.Inc()).Done();
+    public readonly ID Identifier = ID.Unqiue;
 
     readonly Info _info = info;
     readonly ImmutableArray<Pair<string, TypedValue>> _arguments = [.. arguments];
@@ -77,28 +74,28 @@ public class FunctionDeclaration(
             })
         ];
 
-    public static void ResolveArgumentMutability(Info info, Mutability from, Mutability to, Mutability toType)
+    public static void ResolveArgumentMutability(Info info, TypeMutability from, TypeMutability to, TypeMutability toType)
     {
         switch (to)
         {
-            case Mutability.Copy:
+            case TypeMutability.Copy:
                 switch (toType)
                 {
-                    case Mutability.Mutate: throw CompilationException.Create(info, "primitive argument cannot get mutable type value");
+                    case TypeMutability.Mutate: throw CompilationException.Create(info, "primitive argument cannot get mutable type value");
                 }
                 break;
-            case Mutability.Mutate:
+            case TypeMutability.Mutate:
                 switch (from)
                 {
-                    case Mutability.Copy: throw CompilationException.Create(info, "mutable argument cannot get primitive value");
-                    case Mutability.Const: throw CompilationException.Create(info, "mutable argument cannot get immutable value");
+                    case TypeMutability.Copy: throw CompilationException.Create(info, "mutable argument cannot get primitive value");
+                    case TypeMutability.Const: throw CompilationException.Create(info, "mutable argument cannot get immutable value");
                 }
                 break;
-            case Mutability.Const:
+            case TypeMutability.Const:
                 switch (from)
                 {
-                    case Mutability.Copy: throw CompilationException.Create(info, "immutable argument cannot get primitive value");
-                    case Mutability.Mutate: throw CompilationException.Create(info, "immutable argument cannot get mutable value");
+                    case TypeMutability.Copy: throw CompilationException.Create(info, "immutable argument cannot get primitive value");
+                    case TypeMutability.Mutate: throw CompilationException.Create(info, "immutable argument cannot get mutable value");
                 }
                 break;
         }
@@ -119,7 +116,7 @@ public class FunctionDeclaration(
                 value_selector: (i, v, t, a) => default!,
                 type_selector: (i, v, to) =>
                 {
-                    ResolveArgumentMutability(v.info, v.value.Mutability, to.Mutability, to.Type.Mutability);
+                    ResolveArgumentMutability(v.info, v.value.Mutability, to.Mutability, to.Type.Mutability(sc));
 
                     return new(
                         to.Mutability,
@@ -144,7 +141,11 @@ public class FunctionDeclaration(
             if (resolve.Node == null)
                 return new FunctionDefinition(
                     null!,
-                    bin_type
+                    new FunctionMetaType(
+                        new ResolveMetaType(),
+                        arg_types,
+                        declaration: this
+                    )
                 );
             else
                 return resolve;
@@ -197,9 +198,6 @@ public class FunctionDeclaration(
         var result_resolved = TryDo(info, resolve_bin, () => _body.TypeResolve(type_scope));
         var result_type = result_resolved.ValueTypeInfo.Type.Unwrap();
 
-        if (result_type.Mutability == Mutability.Mutate)
-            throw CompilationException.Create(info, "mutable only type is cannot be returned");
-
         if (result_type is PlaceHolderMetaType)
         {
             result_type = NeverMetaType.Get;
@@ -212,6 +210,11 @@ public class FunctionDeclaration(
         {
             type_scope.FinalizeErrorType(result_type);
             result_type = NotMetaType.Get(result_type);
+        }
+
+        if (!result_type.Convention(type_scope) << TypeConvention.Return)
+        {
+            throw CompilationException.Create(_body.Info, $"type {result_type.Name} of returned value is not suitable for returning");
         }
 
         var definition = new FunctionDefinition(
@@ -273,198 +276,5 @@ public class FunctionDeclaration(
         i = j;
         return res;
     }
-
-    // public ITypedValue Call(Scope sc, Info info, ImmutableArray<(Info info, ITypedValue value)> args)
-    // {
-    //     if (args.Length != _arguments.Length)
-    //         throw CompilationException.Create(info, $"called function waiting for {_arguments.Length} but {args.Length} is passed");
-
-    //     var arg_types = new IMetaType[args.Length];
-
-    //     var result_args =
-    //         SpecifyArguments(
-    //             args,
-    //             valid_selector: (i, val, type) => type.Type.Unwrap() is not FunctionMetaType,
-    //             value_selector: (i, val, type, valid) => valid ? _castValue(sc, val.info, val.value, type) : default!,
-    //             type_selector: (i, val, to) => new(
-    //                 val.value.Mutability,
-    //                 arg_types[i] = val.value.Type.ImplicitCast(sc, val.info, to.Type)
-    //             )
-    //         );
-
-    //     var bin_type = new FunctionMetaType(
-    //         PlaceHolderMetaType.Get,
-    //         [.. result_args.Select(v => v.type)],
-    //         null
-    //     );
-    //     var bin_builder = new BinaryTypeBuilder();
-    //     bin_type.Binary(bin_builder);
-    //     var bin = bin_builder.Done();
-
-    //     var call_args = (ImmutableArray<ITypedValue>)[.. SelectIf(result_args, v => (v.include, v.value))];
-
-    //     if (ResolvingStack.TryGetValue(bin, out var definition))
-    //     {
-    //         return _callValue(definition, call_args);
-    //     }
-
-    //     var function = CreateDefinition(
-    //         sc,
-    //         info,
-    //         [.. arg_types.Select((v, i) => new ArgumentMetaType(_arguments[i].val.Mutability, v))],
-    //         type_only: false,
-    //         bin_type,
-    //         bin
-    //     );
-
-    //     return _callValue(function, call_args);
-    // }
-
-
-    // private FunctionDefinition CreateDefinition(
-    //     Scope base_scope,
-    //     Info info,
-    //     ImmutableArray<ArgumentMetaType> args,
-    //     bool type_only,
-    //     FunctionMetaType resolve_type,
-    //     BinaryType resolve_bin)
-    // {
-    //     var i = 0;
-    //     var real_args =
-    //         new Dictionary<string, IMetaType>([
-    //             .. SelectPairsNoFunctions(args, ref i, _arguments, selector: v => v.Type),
-    //         ]);
-
-    //     if (_definitions.TryGetValue(resolve_bin, out var defined))
-    //         return defined;
-
-    //     i = 0;
-    //     var type_scope = base_scope.FictiveVariables(new(SelectKeyValuePairs(args, ref i, _arguments)));
-
-    //     i = 0;
-    //     var resolved_args = (ImmutableArray<ArgumentMetaType>)[.. SelectFunctionsResolved(args)];
-
-    //     var result_type = TryDo(info, resolve_bin, () => _body.TypeResolve(type_scope));
-    //     if (result_type.Unwrap() is PlaceHolderMetaType)
-    //         result_type = PlaceHolderMetaType.Get;
-
-    //     var func_type = new FunctionMetaType(
-    //         result_type,
-    //         resolved_args,
-    //         declaration: this
-    //     );
-
-    //     if (type_only)
-    //     {
-    //         ResolvingStack.Remove(resolve_bin);
-    //         return new(func_type, default);
-    //     }
-
-    //     var data = _createFunction(base_scope, func_type);
-
-    //     var compiled =
-    //         TryDo(
-    //             info,
-    //             resolve_bin,
-    //             () => _compileFunction(
-    //                 base_scope.Variables(
-    //                     new(SelectVariablesFrom(
-    //                         args,
-    //                         ref i,
-    //                         data,
-    //                         _registerArgument,
-    //                         base_scope,
-    //                         _arguments))),
-    //                 data,
-    //                 func_type
-    //             )
-    //         );
-
-    //     var result = new FunctionDefinition(
-    //         func_type,
-    //         compiled
-    //     );
-
-    //     _definitions[resolve_bin] = result;
-
-    //     return result;
-    // }
-
-    // private static IEnumerable<TResult> SelectIf<TSource, TResult>(IEnumerable<TSource> source, Func<TSource, (bool, TResult)> selector)
-    // {
-    //     foreach (TSource element in source)
-    //     {
-    //         var (add, value) = selector(element);
-    //         if (add) yield return value;
-    //     }
-    // }
-
-    // private static IEnumerable<KeyValuePair<string, ITypedValue>> SelectVariablesFrom(
-    //     ImmutableArray<ArgumentMetaType> args,
-    //     ref int i,
-    //     FunctionCompileData data,
-    //     RegisterArgument register,
-    //     Scope base_scope,
-    //     IEnumerable<Pair<string, ArgumentMetaType>> collection)
-    // {
-    //     var real_arg = 0;
-    //     var j = i;
-    //     var res =
-    //         collection
-    //         .Select(v =>
-    //         {
-    //             var type = args[j];
-    //             if (type.Type.Unwrap() is FunctionMetaType meta)
-    //             {
-    //                 j++;
-    //                 return KeyValuePair.Create(
-    //                     v.id,
-    //                     register(
-    //                         base_scope,
-    //                         0,
-    //                         data,
-    //                         type.Type,
-    //                         meta.Declaration
-    //                     )
-    //                 );
-    //             }
-    //             j++;
-    //             return KeyValuePair.Create(
-    //                 v.id,
-    //                 register(
-    //                     base_scope,
-    //                     real_arg++,
-    //                     data,
-    //                     type.Type,
-    //                     null
-    //                 )
-    //             );
-    //         });
-    //     i = j;
-    //     return res;
-    // }
-
-    // private static IEnumerable<KeyValuePair<string, Variable>> SelectVariablesFromValues(
-    //     IMetaType[] args,
-    //     ref uint i,
-    //     LLVMValueRef llvm_function,
-    //     Dictionary<string, LLVMValue> collection)
-    // {
-    //     var j = i;
-    //     var res =
-    //         from v in collection
-    //         let type = args[j]
-    //         select KeyValuePair.Create(
-    //             v.Key,
-    //             new Variable(
-    //                 type,
-    //                 llvm_function.GetParam(j++),
-    //                 default,
-    //                 VariableFlags.Setable
-    //             )
-    //         );
-    //     i = j;
-    //     return res;
-    // }
 }
 

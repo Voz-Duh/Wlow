@@ -22,5 +22,8 @@ public readonly record struct HandlePanicNodeTypeResolved(
     TypedValue ValueTypeInfo,
     INodeTypeResolved Value) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new HandlePanicNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Value.TypeFixation());
+
     public override string ToString() => $"({Value})!";
 }

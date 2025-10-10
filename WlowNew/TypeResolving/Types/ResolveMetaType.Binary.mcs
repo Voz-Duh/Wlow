@@ -47,5 +47,4 @@ public partial class ResolveMetaType
   'op(one, Plus)
   'op(one, Not)
   'op(one, Inv)
-  'op(one, On)
 }

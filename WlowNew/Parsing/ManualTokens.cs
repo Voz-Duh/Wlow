@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Wlow.Shared;
 
 namespace Wlow.Parsing;
@@ -65,6 +64,24 @@ public ref struct ManualTokens
             }
 
         return Default(ref this, cur);
+    }
+
+    public T Any<T>(
+        IEnumerable<TokenType> Tokens,
+        Step<T>? Else,
+        Step<T> After,
+        Step<T> Fail)
+    {
+        if (Overflow) return ElseCompute(Else);
+        var cur = Current;
+
+        if (Tokens.Any(v => v == cur.type))
+        {
+            i++;
+            return After(ref this, cur);
+        }
+
+        return Fail(ref this, cur);
     }
 
     public Or<(TSuccess value, TAfter after), TFail> Until<TSuccess, TAfter, TFail>(

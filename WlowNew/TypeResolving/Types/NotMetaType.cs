@@ -8,15 +8,13 @@ public readonly partial struct NotMetaType : IMetaType
 
     public readonly IMetaType To;
 
-    public ID TypeID => ID.Zero;
-
     public string Name => $"!{To.Name}";
-
-    public Mutability Mutability => To.Mutability;
+    public TypeMutability Mutability(Scope ctx) => To.Mutability(ctx);
+    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.Any;
 
     NotMetaType(IMetaType to) => To = to;
 
-    public void Binary(BinaryTypeBuilder bin) =>
+    public Nothing Binary(BinaryTypeBuilder bin) =>
         bin.Push(BinaryTypeRepr.Never);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)
@@ -27,11 +25,4 @@ public readonly partial struct NotMetaType : IMetaType
 
     public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
         => throw IMetaType.CastError(info, this, to);
-
-    public IMetaType OperationOn(Scope ctx, Info info)
-    {
-        // TODO return tuple (bool, To, array(u8))
-        // XMPL: return TupleMetaType.From(BoolMetaType.Get, To, Array.To(UIntMetaType.Get8));
-        throw new NotImplementedException();
-    }
 }

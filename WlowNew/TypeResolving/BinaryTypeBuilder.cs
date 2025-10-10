@@ -7,19 +7,28 @@ namespace Wlow.TypeResolving;
 /// <summary>
 /// Used to build binary type
 /// </summary>
-public readonly ref struct BinaryTypeBuilder()
+public readonly struct BinaryTypeBuilder()
 {
     static readonly ConcurrentStack<List<byte>> freeStack = new();
 
     // using of TryPop to atomic check & get in one
     readonly List<byte> repr = freeStack.TryPop(out var result) ? result : [];
 
-    public void Push(BinaryTypeRepr elem) => repr.Add((byte)elem);
-    public void Push(byte elem) => repr.Add(elem);
-    public void Push(ID elem)
+    public Nothing Push(BinaryTypeRepr elem)
+    {
+        repr.Add((byte)elem);
+        return Nothing.Value;
+    }
+    public Nothing Push(byte elem)
+    {
+        repr.Add(elem);
+        return Nothing.Value;
+    }
+    public Nothing Push(ID elem)
     {
         var repr = this.repr;
         UnsafeCast.ByteIterate(elem, repr.Add);
+        return Nothing.Value;
     }
 
     /// <summary>

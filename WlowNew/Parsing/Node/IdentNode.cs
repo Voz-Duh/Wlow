@@ -17,5 +17,6 @@ public readonly record struct IdentNode(Info Info, string Name) : INode
 
 public readonly record struct IdentNodeTypeResolved(Info Info, TypedValue ValueTypeInfo, string Name) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation() => new IdentNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Name);
     public override string ToString() => Name;
 }

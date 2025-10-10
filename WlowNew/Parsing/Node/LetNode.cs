@@ -11,16 +11,19 @@ public readonly record struct LetNode(Info Info, string Name, IMetaType Type, IN
         {
             scope.CreateLabel(Info, Name);
 
-            return new LabelNodeTypeResolved();
+            if (Type is not PlaceHolderMetaType)
+                throw CompilationException.Create(Info, "let without value must have placeholder type, try to remove type annotation");
+
+            return new LabelNodeTypeResolved(Info, TypedValue.From(Scope.Empty, VoidMetaType.Get), Name);
         }
 
         var value = Value.TypeResolve(scope.Isolated);
         var type = value.ValueTypeInfo.Type.ImplicitCast(scope, Info, Type);
 
-        if (type.Mutability == Mutability.Mutate)
+        if (type.Mutability(scope) == TypeMutability.Mutate)
             throw CompilationException.Create(Info, "mutable type cannot be placed to immutable variable");
 
-        var varInfo = scope.CreateVariable(Info, Mutability.Const, Name, type);
+        var varInfo = scope.CreateVariable(Info, TypeMutability.Const, Name, type);
 
         return new LetNodeTypeResolved(Info, varInfo, Name, value);
     }
@@ -28,10 +31,9 @@ public readonly record struct LetNode(Info Info, string Name, IMetaType Type, IN
     public override string ToString() => Value is null ? $"let {Name} {Type.Name}" : $"let {Name} {Type.Name} = {Value}";
 }
 
-public readonly record struct LabelNodeTypeResolved(Info Info, string Name) : INodeTypeResolved
+public readonly record struct LabelNodeTypeResolved(Info Info, TypedValue ValueTypeInfo, string Name) : INodeTypeResolved
 {
-    // TODO void type here
-    public TypedValue ValueTypeInfo => new();
+    public INodeTypeResolved TypeFixation() => this;
 
     public override string ToString() => $"let {Name} {ValueTypeInfo}";
 }
@@ -39,5 +41,7 @@ public readonly record struct LabelNodeTypeResolved(Info Info, string Name) : IN
 
 public readonly record struct LetNodeTypeResolved(Info Info, TypedValue ValueTypeInfo, string Name, INodeTypeResolved Value) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new LetNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Name, Value.TypeFixation());
     public override string ToString() => $"let {Name} {ValueTypeInfo} = {Value}";
 }

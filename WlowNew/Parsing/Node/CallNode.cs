@@ -13,14 +13,10 @@ public readonly record struct CallNode(
     public INodeTypeResolved TypeResolve(Scope scope)
     {
         var value = Value.TypeResolve(scope.Isolated);
-        // TODO calling of fixed functions (there's no fixed functions right now)
-        if (value.ValueTypeInfo.Type.Unwrap() is not FunctionMetaType function)
-            throw CompilationException.Create(Info, $"trying to call type {value.ValueTypeInfo.Type.Name} which is not callable");
+        var arguments = Arguments.Select(v => (v.Info, Node: v.TypeResolve(scope.Isolated)));
+        var definition = value.ValueTypeInfo.Type.Unwrap().Call(scope, Info, [.. from v in arguments select (v.Info, v.Node.ValueTypeInfo)]);
 
-        var arguments = Arguments.Select(v => (v.Info, Node: v.TypeResolve(scope.Isolated))).ToImmutableArray();
-        var definition = function.Declaration.ResolveCall(scope, Info, [.. from v in arguments select (v.Info, v.Node.ValueTypeInfo)]);
-
-        return new CallNodeTypeResolved(Info, new(Mutability.Const, definition.Type.Result), definition, value, [.. from v in arguments select v.Node]);
+        return new CallNodeTypeResolved(Info, new(TypeMutability.Const, definition.Type.Result), definition, value, [.. from v in arguments select v.Node]);
     }
 
     public override string ToString() => $"({Value}' {string.Join(", ", Arguments)})";
@@ -34,5 +30,7 @@ public readonly record struct CallNodeTypeResolved(
     INodeTypeResolved Value,
     ImmutableArray<INodeTypeResolved> Arguments) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new CallNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Definition, Value.TypeFixation(), [.. from v in Arguments select v.TypeFixation()]);
     public override string ToString() => $"--: {ValueTypeInfo.Type.Name} -- {Definition.Type.Name} = {Definition.Node} :-- ({Value}' {string.Join(", ", Arguments)})";
 }

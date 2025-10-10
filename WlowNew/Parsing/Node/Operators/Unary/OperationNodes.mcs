@@ -7,7 +7,7 @@
     public INodeTypeResolved TypeResolve(Scope scope)
     {
       var value = Value.TypeResolve(scope);
-      var info = TypedValue.From(value.ValueTypeInfo.Type.Operation'c('name)(scope, Info));
+      var info = TypedValue.From(scope, value.ValueTypeInfo.Type.Operation'c('name)(scope, Info));
 
       return new 'c('name)NodeTypeResolved(Info, info, value);
     }
@@ -20,6 +20,9 @@
     TypedValue ValueTypeInfo,
     INodeTypeResolved Value) : INodeTypeResolved
   {
+    public INodeTypeResolved TypeFixation()
+      => new 'c('name)NodeTypeResolved(Info, ValueTypeInfo.Fixate(), Value.TypeFixation());
+
     public override string ToString() => $"('optext{Value}'soptext)";
   }
 )

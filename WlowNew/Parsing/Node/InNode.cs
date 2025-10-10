@@ -9,7 +9,7 @@ public readonly record struct InNode(Info Info, string Name) : INode
     {
         scope.ValidateLabel(Info, Name);
 
-        return new InNodeTypeResolved(Info, TypedValue.From(NeverMetaType.Get), Name);
+        return new InNodeTypeResolved(Info, TypedValue.From(scope, NeverMetaType.Get), Name);
     }
 
     public override string ToString() => $"in {Name}";
@@ -17,5 +17,6 @@ public readonly record struct InNode(Info Info, string Name) : INode
 
 public readonly record struct InNodeTypeResolved(Info Info, TypedValue ValueTypeInfo, string Name) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation() => this;
     public override string ToString() => $"in {Name}";
 }

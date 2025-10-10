@@ -36,5 +36,4 @@ public readonly partial struct NeverMetaType
   'op(one, Plus)
   'op(one, Not)
   'op(one, Inv)
-  'op(one, On)
 }

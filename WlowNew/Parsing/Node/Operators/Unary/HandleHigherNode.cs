@@ -27,5 +27,8 @@ public readonly record struct HandleHigherNodeTypeResolved(
     INodeTypeResolved Value,
     IMetaType ErrorAtType) : INodeTypeResolved
 {
+    public INodeTypeResolved TypeFixation()
+        => new HandleHigherNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Value.TypeFixation(), ErrorAtType.Fixate());
+
     public override string ToString() => $"({Value})?";
 }

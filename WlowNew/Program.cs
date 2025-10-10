@@ -1,4 +1,5 @@
 ﻿using Wlow.Parsing;
+using Wlow.Shared;
 
 var tokens = Token.Tokenize(
 @"
@@ -11,21 +12,22 @@ K' 5, 10;
 let S = fn a, b, c = a' c, (b' c);
 S' (fn x, y = x + y), (fn x = x * 2), 3
 
---:
-let x = fn a, b =
-    b + (a' b)?;
-x' (fn a = a * 2), 2;
-x' (fn a = if a == 1 = fail; else = a - 1), 2
+-- let x = fn a, b =
+--     b + (a' b)?;
+-- x' (fn a = a * 2), 2;
+-- x' (fn a = if a == 1 = fail; else = a - 1), 2
 
-let x = fn = fail;
-x'
+-- let x = fn = fail;
+-- x'
 
-let fib = fn f, n =
-    if n <= 1 = n;
-    else = (f' f, n - 1) + (f' f, n - 2);
+-- let fib = fn f, n =
+--    if n <= 1 = n;
+--    else = (f' f, n - 1) + (f' f, n - 2);
+-- let fib_of_10 = fib' fib, 10
 
-let fib_of_10 = fib' fib, 10
-:--
+-- let x = 2;
+-- let y &(x) = x + 1;
+-- y + x
 "
 );
 Console.WriteLine(string.Join(", ", tokens));
@@ -33,4 +35,8 @@ var astRoot = ASTGen.Expression(tokens);
 Console.WriteLine("---------- PARSED ----------");
 Console.WriteLine(astRoot);
 Console.WriteLine("---------- RESOLVED ----------");
-Console.WriteLine(astRoot.TypeResolve(new()));
+var resolved = astRoot.TypeResolve(Scope.Create());
+Console.WriteLine(resolved);
+Console.WriteLine("---------- FIXED ----------");
+var fixated = resolved.TypeFixation();
+Console.WriteLine(fixated);
