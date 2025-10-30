@@ -9,9 +9,9 @@ public readonly record struct AccessIndexNode(Info Info, INode Value, int Index)
     {
         var value = Value.TypeResolve(scope);
 
-        value.ValueTypeInfo.Type.AccessIndex(scope, Info, Index);
+        var type = value.ValueTypeInfo.Type.AccessIndex(scope, Info, Index);
 
-        return new AccessIndexNodeTypeResolved(Info, value.ValueTypeInfo, value, Index);
+        return new AccessIndexNodeTypeResolved(Info, TypedValue.From(type), value, Index);
     }
 
     public override string ToString() => $"({Value}).{Index}";

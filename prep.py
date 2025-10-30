@@ -87,15 +87,14 @@ dir: str = gmpath('workpath')
 res: str = gmand('result')
 inc: stn = gpath('include')
 
-
 if len(sys.argv) > 2:
- print('Program allows only -c(lear) argument to clear generated files')
+ print('Program allows only -c | --clear argument to clear generated files')
  exit(1)
 
 clear = False
 if len(sys.argv) == 2:
  a = sys.argv[1].strip()
- if a == '-c' or a == '-clear':
+ if a == '-c' or a == '--clear':
   clear = True
  else:
   print('Program allows only -c(lear) argument to clear generated files')
@@ -119,7 +118,7 @@ if inc is not None:
 
 cmd = (
  'gpp',
- '-U', '\'', '', '(\\W', '\\W,\\W', '\\W)', '(\\W', '\\W)', '~', '@',
+ '-U', '\'', '', '(\\W', '\\W,\\W', '\\W)', '(\\W', '\\W)', '~', '',
  '-M', '~', '\\n', '(\\W', '\\W:\\W', '\\W)', '(\\W', '\\W)',
  '+c', '---', '\\n',
  '+sqqq', '~(', ')~', '',

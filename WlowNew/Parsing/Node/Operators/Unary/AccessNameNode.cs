@@ -9,9 +9,9 @@ public readonly record struct AccessNameNode(Info Info, INode Value, string Name
     {
         var value = Value.TypeResolve(scope);
 
-        value.ValueTypeInfo.Type.AccessName(scope, Info, Name);
+        var type = value.ValueTypeInfo.Type.AccessName(scope, Info, Name);
 
-        return new AccessNameNodeTypeResolved(Info, value.ValueTypeInfo, value, Name);
+        return new AccessNameNodeTypeResolved(Info, TypedValue.From(type), value, Name);
     }
 
     public override string ToString() => $"({Value}).{Name}";

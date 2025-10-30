@@ -4,9 +4,20 @@
       , IMetaType right
     ~endif
     )
-    => throw IMetaType.OperateError(IMetaType.OpName.'name, info, this
     ~ifeq('type:bin)
-      , right
+      => IMetaType.Operate(ctx, info, this, right).Start().Done(IMetaType.OpName.'name);
+    ~else
+      => throw IMetaType.OperateError(IMetaType.OpName.'name, info, this);
     ~endif
-    );
+)
+
+~define('err_cast:
+    public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)
+        => TemplateCast(ctx, info, to, false);
+
+    public IMetaType ImplicitCast(Scope ctx, Info info, IMetaType to)
+        => TemplateCast(ctx, info, to, false);
+
+    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to, bool repeat)
+        => IMetaType.SmartTypeSelect(ctx, info, this, to, (_, _) => null, is_template: true, repeat: repeat);
 )

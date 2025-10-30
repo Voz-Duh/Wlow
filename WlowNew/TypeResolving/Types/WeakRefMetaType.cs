@@ -3,15 +3,13 @@ using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
-public partial class ResolveMetaType : IMetaType
+public partial class WeakRefMetaType : IMetaType
 {
-    public static ResolveMetaType Create() => new();
-    public static ResolveMetaType From(IMetaType Type) => new(Type);
+    public static WeakRefMetaType From(IMetaType Type) => new(Type);
 
     public IMetaType Current;
 
-    ResolveMetaType() => Current = PlaceHolderMetaType.Get;
-    ResolveMetaType(IMetaType current) => Current = current;
+    WeakRefMetaType(IMetaType current) => Current = current;
 
     public override string ToString() => Current.ToString()!;
     public bool IsKnown => Current.IsKnown;
@@ -23,6 +21,9 @@ public partial class ResolveMetaType : IMetaType
         => Current.Binary(bin, info);
 
     public IMetaType? UnwrapFn()
+        => Current;
+
+    public IMetaType? UnweakFn()
         => Current;
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)

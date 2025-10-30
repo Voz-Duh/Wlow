@@ -4,7 +4,7 @@ using Wlow.TypeResolving;
 
 namespace Wlow.Parsing;
 
-public readonly record struct IntegerNode(Info Info, BigInteger Value, IntMetaType Type) : INode, INodeTypeResolved
+public readonly record struct UIntegerNode(Info Info, BigInteger Value, UIntMetaType Type) : INode, INodeTypeResolved
 {
     public TypedValue ValueTypeInfo => new(TypeMutability.Copy, Type);
     public INodeTypeResolved TypeFixation() => this;

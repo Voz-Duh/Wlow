@@ -30,8 +30,6 @@ public partial class ASTGen
             _ => throw new NotSupportedException(),
         };
 
-    static INode SetterIdent(INode v) => v;
-
     static Func<INode, INode>? ParseForSetterEffect(ref ManualTokens toks)
         => toks.Any<Func<INode, INode>?>(
             [TokenType.Set,
@@ -203,14 +201,13 @@ public partial class ASTGen
             ctx, toks,
             [
                 TokenType.Add,        TokenType.Sub,
-                TokenType.BitwiseAnd, TokenType.BitwiseOr,
+                TokenType.BitwiseOr,
             ],
             ExpressionMultipilication,
             (tok, a, b) => tok.type switch
             {
                 TokenType.Add => new AddNode(tok.info, a, b),
                 TokenType.Sub => new SubNode(tok.info, a, b),
-                TokenType.BitwiseAnd => new BitwiseAndNode(tok.info, a, b),
                 TokenType.BitwiseOr => new BitwiseOrNode(tok.info, a, b),
                 _ => throw new NotImplementedException(),
             }
@@ -221,7 +218,7 @@ public partial class ASTGen
             ctx, toks,
             [
                 TokenType.Mul, TokenType.Div,
-                TokenType.Mod,
+                TokenType.Mod, TokenType.BitwiseAnd,
                 TokenType.Shr, TokenType.Shl,
                 TokenType.Ror, TokenType.Rol,
             ],
@@ -235,6 +232,7 @@ public partial class ASTGen
                 TokenType.Shl => new ShlNode(tok.info, a, b),
                 TokenType.Ror => new RorNode(tok.info, a, b),
                 TokenType.Rol => new RolNode(tok.info, a, b),
+                TokenType.BitwiseAnd => new BitwiseAndNode(tok.info, a, b),
                 _ => throw new NotImplementedException(),
             }
         );
@@ -258,7 +256,7 @@ public partial class ASTGen
                     (ref toks, tok) => NodeOrEffect.Create(v => new NegateNode(tok.info, v))),
                 (TokenType.Add,
                     (ref toks, tok) => NodeOrEffect.Create(v => new PlusNode(tok.info, v))),
-                (TokenType.Mul,
+                (TokenType.Ptr,
                     (ref toks, tok) => NodeOrEffect.Create(v => new DerefNode(tok.info, v))),
                 (TokenType.BitwiseAnd,
                     (ref toks, tok) => NodeOrEffect.Create(v => new RefNode(tok.info, v))),
@@ -278,7 +276,7 @@ public partial class ASTGen
                 (ref _, tok) => throw CompilationExceptionList.Expected(tok.info, "field name"),
                 (TokenType.Ident,
                     (ref toks, tok) => OptEffect.From(v => new AccessNameNode(dot.info, v, tok.value))),
-                (TokenType.UNum,
+                (TokenType.Num,
                     (ref toks, tok) => OptEffect.From(v => new AccessIndexNode(tok.info, v, int.Parse(tok.value)))),
                 (TokenType.FNum, (ref toks, tok) =>
                 {
@@ -299,7 +297,7 @@ public partial class ASTGen
             toks.Switch(
                 Else: (ref _, tok) => OptEffect.Hasnt(),
                 Default: (ref _, tok) => throw CompilationExceptionList.ExpressionContinue(tok.info),
-                (TokenType.Mul,
+                (TokenType.Ptr,
                     (ref toks, tok) => OptEffect.From(v => new DerefNode(tok.info, v))),
                 (TokenType.PlaceHolder,
                     (ref toks, tok) => OptEffect.From(v => new HandleHigherNode(tok.info, v))),
@@ -319,9 +317,27 @@ public partial class ASTGen
             Else: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
             Default: (ref toks, tok) => throw CompilationExceptionList.ExpressionInvalid(tok.info),
             (TokenType.Ident, (ref toks, tok) => new IdentNode(tok.info, tok.value)),
-            (TokenType.UNum, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
-            (TokenType.INum, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
-            (TokenType.In, (ref toks, tok) => {
+            (TokenType.Num, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value), IntMetaType.Get32)),
+            (TokenType.ValI8, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value[..^2]), IntMetaType.Get8)),
+            (TokenType.ValI16, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), IntMetaType.Get16)),
+            (TokenType.ValI32, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), IntMetaType.Get32)),
+            (TokenType.ValI64, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), IntMetaType.Get64)),
+            (TokenType.ValI128, (ref toks, tok) => new IntegerNode(tok.info, BigInteger.Parse(tok.value[..^4]), IntMetaType.Get128)),
+            (TokenType.ValU8, (ref toks, tok) => new UIntegerNode(tok.info, BigInteger.Parse(tok.value[..^2]), UIntMetaType.Get8)),
+            (TokenType.ValU16, (ref toks, tok) => new UIntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), UIntMetaType.Get16)),
+            (TokenType.ValU32, (ref toks, tok) => new UIntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), UIntMetaType.Get32)),
+            (TokenType.ValU64, (ref toks, tok) => new UIntegerNode(tok.info, BigInteger.Parse(tok.value[..^3]), UIntMetaType.Get64)),
+            (TokenType.ValU128, (ref toks, tok) => new UIntegerNode(tok.info, BigInteger.Parse(tok.value[..^4]), UIntMetaType.Get128)),
+            // TODO implement float type
+            (TokenType.ValF8, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.ValF16, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.ValF32, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.ValF64, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.ValF128, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.LDNum, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.FNum, (ref toks, tok) => throw new NotImplementedException()),
+            (TokenType.In, (ref toks, tok) =>
+            {
                 static (Info, string) error(ref ManualTokens _, Token tok)
                     => throw CompilationExceptionList.Expected(tok.info, "variable name");
                 var (name_info, name) = toks.Get(
@@ -333,27 +349,60 @@ public partial class ASTGen
 
                 var effect = ParseForSetterEffect(ref toks);
                 INode jump = new InNode(tok.info, name);
-                
+
                 return effect is not null
                     ? new DelimitedStepsNode(
                         [effect(new IdentNode(name_info, name))],
                         jump)
                     : jump;
             }),
-            (TokenType.Fail, (ref toks, tok) => {
+            (TokenType.Fail, (ref toks, tok) =>
+            {
                 // TODO fail with message, optional data etc what i cna imagine
                 return new FailNode(tok.info, new IntegerNode(tok.info, 1, IntMetaType.Get8));
             }),
             (TokenType.Bracket, (ref toks, tok) =>
             {
                 var inner = ManualTokens.Create(tok, tok.inner);
-                return new ScopeNode(
-                    tok.info,
-                    inner.Start(
-                        OnEmpty: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
-                        Do: (ref toks) => Expression(ref toks, FullScoped: true)
-                    )
-                ) as INode;
+
+                return inner.Start(
+                    OnEmpty: (ref _, tok) => throw CompilationExceptionList.ValueCannotBeEmpty(tok.info),
+                    Do: (ref toks) =>
+                    {
+                        var tuple = false;
+                        var values = new List<INode>() { Expression(ref toks, CommaEnd: true, FullScoped: true) };
+                        while (toks.Get(
+                            TokenType.Comma,
+                            Else: (ref toks, tok) => false,
+                            Fail: (ref toks, tok) => toks.StepBack().Of(false),
+                            Success: (ref toks, tok) =>
+                            {
+                                tuple = true;
+                                return toks.Start(
+                                    OnEmpty: (ref _, _) => false,
+                                    Do: (ref toks) =>
+                                    {
+                                        values.Add(Expression(ref toks, CommaEnd: true, FullScoped: true));
+                                        return true;
+                                    }
+                                );
+                            }
+                        )) ;
+
+                        toks.Done(Fail: ctx => throw CompilationExceptionList.ExpressionContinue(ctx.info));
+
+                        if (!tuple)
+                            return new ScopeNode(
+                                tok.info,
+                                values[0]
+                            );
+                        else
+                            return new TupleNode(
+                                tok.info,
+                                [.. values]
+                            ) as INode;
+                    }
+                );
             })
         );
 }

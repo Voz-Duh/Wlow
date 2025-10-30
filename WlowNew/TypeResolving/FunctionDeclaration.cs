@@ -6,7 +6,8 @@ namespace Wlow.TypeResolving;
 
 public class FunctionDeclaration(
     Info info,
-    IEnumerable<Pair<string, TypedValue>> arguments,
+    IEnumerable<Pair<string, TypedValueAnnot>> arguments,
+    TypeAnnot result,
     INode body)
 {
     [ThreadStatic]
@@ -21,10 +22,11 @@ public class FunctionDeclaration(
     public readonly ID Identifier = ID.Unqiue;
 
     readonly Info _info = info;
-    readonly ImmutableArray<Pair<string, TypedValue>> _arguments = [.. arguments];
     readonly INode _body = body;
+    public readonly ImmutableArray<Pair<string, TypedValueAnnot>> Arguments = [.. arguments];
+    public readonly TypeAnnot Result = result;
 
-    public FunctionMetaType CreateType()
+    public FunctionMetaType CreateType(Scope scope)
         => new(
             PlaceHolderMetaType.Get,
             [.. arguments.Select(v => v.val)],
@@ -56,21 +58,24 @@ public class FunctionDeclaration(
         }
     }
 
-    public ImmutableArray<(bool include, TypedValue value, TypedValue type)> SpecifyArguments<TElement>(
+    public ImmutableArray<(bool include, TypedValue value, TypedValue type, Info info)> SpecifyArguments<TElement>(
         ImmutableArray<TElement> collection,
         Func<int, TElement, TypedValue,       /* return: */ bool> valid_selector,
         Func<int, TElement, TypedValue, bool, /* return: */ TypedValue> value_selector,
-        Func<int, TElement, TypedValue,       /* return: */ TypedValue> type_selector)
+        Func<int, TElement,                   /* return: */ Info>? info_selector,
+        Func<int, TElement, TypedValue,       /* return: */ TypedValue> type_selector,
+        Func<int, Info,     TElement,   TypedValueAnnot,  /* return: */ TypedValue> annot_resolver)
         => [
             ..
-            _arguments
+            Arguments
             .Select((v, i) =>
             {
                 var arg = collection[i];
-                var type = type_selector(i, arg, v.val);
+                var info = info_selector?.Invoke(i, arg) ?? default;
+                var type = type_selector(i, arg, annot_resolver(i, info, arg, v.val));
                 var valid = valid_selector(i, arg, type);
 
-                return (valid, value_selector(i++, arg, type, valid), type);
+                return (valid, value_selector(i++, arg, type, valid), type, info);
             })
         ];
 
@@ -106,44 +111,51 @@ public class FunctionDeclaration(
         Info info,
         ImmutableArray<(Info info, TypedValue value)> args)
     {
-        if (args.Length != _arguments.Length)
-            throw CompilationException.Create(info, $"called function waiting for {_arguments.Length} arguments but {args.Length} is passed");
+        if (args.Length != Arguments.Length)
+            throw CompilationException.Create(info, $"called function waiting for {Arguments.Length} arguments but {args.Length} is passed");
+
+        var type_scope = Scope.Create();
 
         var arg_types =
             SpecifyArguments(
                 args,
                 valid_selector: (i, v, t) => true,
                 value_selector: (i, v, t, a) => default!,
-                type_selector: (i, v, to) =>
+                info_selector: (i, v) => v.info,
+                annot_resolver: (i, info, v, annot) =>
                 {
-                    ResolveArgumentMutability(v.info, v.value.Mutability, to.Mutability, to.Type.Mutability(sc));
-
-                    return new(
-                        to.Mutability,
-                        v.value.Type.ImplicitCast(sc, v.info, to.Type)
-                    );
-                }
+                    var arg = Arguments[i];
+                    var to = arg.val >> (type_scope, info);
+                    ResolveArgumentMutability(info, v.value.Mutability, to.Mutability, to.Type.Mutability);
+                    var type = WeakRefMetaType.From(v.value.Type.ImplicitCast(sc, v.info, to.Type));
+                    return type_scope.CreateArgument(info, v.value.Mutability, arg.id, type);
+                },
+                type_selector: (i, v, type) => type
             )
-            .Select(v => v.type)
+            .Select(v => v.type.Unweak())
             .ToImmutableArray();
+
+        var result_type = (Result >> (type_scope, info)).Unweak();
+
+        var arg_types_annot = arg_types.Select(v => TypedValueAnnot.From(v)).ToImmutableArray();
 
         var bin_type = new FunctionMetaType(
             PlaceHolderMetaType.Get,
-            arg_types,
+            arg_types_annot,
             declaration: this
         );
         var bin_builder = new BinaryTypeBuilder();
-        bin_type.Binary(bin_builder);
+        bin_type.Binary(bin_builder, info);
         var bin = bin_builder.Done();
 
         if (ResolvingStack.TryGetValue(bin, out var resolve))
         {
-            if (resolve.Node == null)
+            if (resolve.BumpNode == null)
                 return new FunctionDefinition(
                     null!,
                     new FunctionMetaType(
-                        new ResolveMetaType(),
-                        arg_types,
+                        result_type.IsKnown ? result_type : ResolveMetaType.Create(),
+                        arg_types_annot,
                         declaration: this
                     )
                 );
@@ -155,6 +167,7 @@ public class FunctionDeclaration(
             sc,
             info,
             arg_types,
+            result_type,
             bin,
             bin_type
         );
@@ -164,13 +177,14 @@ public class FunctionDeclaration(
         Scope base_scope,
         Info info,
         ImmutableArray<TypedValue> args,
+        IMetaType result,
         BinaryType resolve_bin,
         FunctionMetaType bin_type)
     {
         var i = 0;
         var real_args =
             new Dictionary<string, IMetaType>([
-                .. SelectPairsNoFunctions(args, ref i, _arguments, selector: v => v.Type),
+                .. SelectPairsNoFictive(args, ref i, Arguments),
             ]);
 
         var definitonsResolve =
@@ -190,12 +204,12 @@ public class FunctionDeclaration(
             return def;
 
         i = 0;
-        var type_scope = Scope.FictiveVariables(new(SelectKeyValuePairs(args, ref i, _arguments)));
+        var type_scope = Scope.FictiveVariables(new(SelectKeyValuePairs(args, ref i, Arguments)));
 
         i = 0;
         var resolved_args = (ImmutableArray<TypedValue>)[.. SelectFunctionsResolved(args)];
 
-        var result_resolved = TryDo(info, resolve_bin, () => _body.TypeResolve(type_scope));
+        var result_resolved = TryDo(info, resolve_bin, () => new ImplicitCastNode(_body, result).TypeResolve(type_scope));
         var result_type = result_resolved.ValueTypeInfo.Type.Unwrap();
 
         if (result_type is PlaceHolderMetaType)
@@ -212,9 +226,9 @@ public class FunctionDeclaration(
             result_type = NotMetaType.Get(result_type);
         }
 
-        if (!result_type.Convention(type_scope) << TypeConvention.Return)
+        if (!result_type.Convention << TypeConvention.Return)
         {
-            throw CompilationException.Create(_body.Info, $"type {result_type.Name} of returned value is not suitable for returning");
+            throw CompilationException.Create(_body.Info, $"type {result_type} of returned value is not suitable for returning");
         }
 
         var definition = new FunctionDefinition(
@@ -238,18 +252,17 @@ public class FunctionDeclaration(
         where v.Type.Unwrap() is not FunctionMetaType
         select v;
 
-    private static IEnumerable<KeyValuePair<string, IMetaType>> SelectPairsNoFunctions<T>(
+    private static IEnumerable<KeyValuePair<string, IMetaType>> SelectPairsNoFictive<T>(
         ImmutableArray<TypedValue> args,
         ref int i,
-        ImmutableArray<Pair<string, T>> collection,
-        Func<T, IMetaType> selector)
+        ImmutableArray<Pair<string, T>> collection)
     {
         var j = i;
         var res =
             collection
             .Where(v =>
             {
-                var skip = selector(v.val).Unwrap() is FunctionMetaType;
+                var skip = args[j].Type.ByteSize.Unwrap(Default: /* do skip */ true, v => v == 0);
                 if (skip) j++;
                 return !skip;
             })

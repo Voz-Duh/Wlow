@@ -3,14 +3,16 @@ using Wlow.TypeResolving;
 
 namespace Wlow.Parsing;
 
-public readonly record struct MutNode(Info Info, string Name, IMetaType Type, INode Value) : INode
+public readonly record struct MutNode(Info Info, string Name, TypeAnnot Type, INode Value) : INode
 {
     public INodeTypeResolved TypeResolve(Scope scope)
     {
-        var value = Value.TypeResolve(scope.Isolated);
-        var type = value.ValueTypeInfo.Type.ImplicitCast(scope, Info, Type);
+        var type = Type >> (scope, Info);
 
-        if (type.Mutability(scope) == TypeMutability.Const)
+        var value = Value.TypeResolve(scope.Isolated);
+        type = value.ValueTypeInfo.Type.ImplicitCast(scope, Info, type);
+
+        if (!type.Convention << TypeConvention.Set)
             throw CompilationException.Create(Info, "immutable type cannot be placed to mutable variable");
 
         var varInfo = scope.CreateVariable(Info, TypeMutability.Mutate, Name, type);

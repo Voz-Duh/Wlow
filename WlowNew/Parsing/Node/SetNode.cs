@@ -13,9 +13,9 @@ public readonly record struct SetNode(
         var acceptor = Acceptor.TypeResolve(scope.Isolated);
         var value = Value.TypeResolve(scope.Isolated);
         
-        if (!acceptor.ValueTypeInfo.Type.Convention(scope) << TypeConvention.Set)
+        if (!acceptor.ValueTypeInfo.Type.Convention << TypeConvention.Set)
         {
-            throw CompilationException.Create(Acceptor.Info, $"type {acceptor.ValueTypeInfo.Type} of left side is not suitable to be assigned");
+            throw CompilationException.Create(Acceptor.Info, $"type {acceptor.ValueTypeInfo.Type} of left side is not mutable");
         }
 
         return new SetNodeTypeResolved(Info, acceptor.ValueTypeInfo, acceptor, value);

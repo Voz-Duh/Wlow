@@ -7,12 +7,13 @@ public readonly partial struct BoolMetaType : IMetaType
     public static readonly BoolMetaType Get = default;
 
 
-    public string Name => "bool";
-    public TypeMutability Mutability(Scope ctx) => TypeMutability.Copy;
-    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.Any;
+    public override string ToString() => "bool";
+    public bool IsKnown => true;
+    public Opt<uint> ByteSize => 1;
+    public TypeMutability Mutability => TypeMutability.Copy;
+    public Flg<TypeConvention> Convention => TypeConvention.Any;
 
-    public Nothing Binary(BinaryTypeBuilder bin) =>
-        bin.Push(BinaryTypeRepr.Bool);
+    public Nothing Binary(BinaryTypeBuilder bin, Info info) => bin.Push(BinaryTypeRepr.Bool);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)
         => ImplicitCast(ctx, info, to);
@@ -27,8 +28,8 @@ public readonly partial struct BoolMetaType : IMetaType
                 : null
         );
 
-    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
-        => throw IMetaType.CastError(info, this, to);
+    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to, bool repeat)
+        => IMetaType.SmartTypeSelect(ctx, info, this, to, (_, _) => null, is_template: true, repeat: repeat);
 
     public IMetaType OperationEquals(Scope ctx, Info info, IMetaType right)
         => IMetaType.Operate(ctx, info, this, right)

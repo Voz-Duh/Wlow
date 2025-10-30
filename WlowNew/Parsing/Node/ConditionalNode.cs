@@ -40,7 +40,7 @@ public readonly record struct ConditionalNode(
             }
         }
 
-        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(scope, type), cond, ifNever, _if, elseNever, _else);
+        return new ConditionalNodeTypeResolved(Info, ifRoot, TypedValue.From(type), cond, ifNever, _if, elseNever, _else);
     }
 
     public override string ToString() => $"if {Cond} = {If}; else = {Else}";

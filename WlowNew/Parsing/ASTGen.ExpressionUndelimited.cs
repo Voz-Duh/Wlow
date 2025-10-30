@@ -1,4 +1,5 @@
 
+using System.Collections.Immutable;
 using Wlow.Shared;
 using Wlow.TypeResolving;
 
@@ -20,13 +21,13 @@ public partial class ASTGen
 
     static INode Variable(
         ref ManualTokens toks,
-        Func<Info, string, IMetaType, INode?, INode> Create,
+        Func<Info, string, TypeAnnot, INode?, INode> Create,
         string RequiredName,
         string RequiredDone,
         string RequiredDefined,
         bool ValueOptional)
     {
-        (Token, IMetaType?) self(ref ManualTokens toks, Token tok) =>
+        (Token, TypeAnnot?) self(ref ManualTokens toks, Token tok) =>
             toks.Start(
                 OnEmpty: (ref _, tok) => throw CompilationException.Create(tok.info, RequiredName),
                 Do: (ref toks) =>
@@ -45,7 +46,7 @@ public partial class ASTGen
                 }
             );
 
-        var (left, value) = Scoped<(Token, IMetaType?), INode?, ((Token, IMetaType?), INode?)>(
+        var (left, value) = Scoped<(Token, TypeAnnot?), INode?, ((Token, TypeAnnot?), INode?)>(
             ref toks,
             Self: (toks, tok) =>
             {
@@ -86,14 +87,40 @@ public partial class ASTGen
     {
         Info info = toks.Context.info;
 
-        var (arguments, body) = Scoped(
+        var (arguments_result, body) = Scoped(
             ref toks,
-            Self: (toks, tok) => toks.IsEmpty ? [] : Token.LeftSplit(tok, toks, [TokenType.Comma], Argument),
+            Self: (toks, tok) => {
+                if (toks.IsEmpty) return ([], TypeAnnot.Placeholder);
+                var sep = Token.LeftSplit(tok, toks, [TokenType.Comma], (ctx, inner) => (ctx, toks: inner.ToImmutableArray()));
+                var args = sep[..^1].Select(v => Argument(v.ctx, v.toks.AsSpan()));
+                var last = sep[^1];
+                var (lastArg, result) =
+                    ManualTokens.Create(last.ctx, last.toks.AsSpan())
+                    .Start(
+                        (ref toks, tok) => Argument(tok, toks.Tokens),
+                        (ref toks) =>
+                            toks.Until(
+                                [TokenType.Cast],
+                                (toks, tok) => Argument(tok, toks),
+                                (ref toks, tok) => Type(tok, ref toks),
+                                (ref toks, tok) => Argument(tok, toks.Tokens)
+                            )
+                    )
+                    .Unwrap(
+                        success => (success.value, success.after),
+                        fail => (fail, TypeAnnot.Placeholder)
+                    );
+                return (
+                    (ImmutableArray<Pair<string, TypedValueAnnot>>)[.. args, lastArg],
+                    result
+                );
+            },
             Scope: (ref toks, tok) => Expression(ref toks),
             NoScope: (ref toks, tok) => Nothing.From(() => throw CompilationException.Create(tok.info, "function body is not defined"))
         ).Unwrap(v => v, v => default);
+        var (arguments, result) = arguments_result;
 
-        return new FunctionValueNode(info, arguments, body);
+        return new FunctionValueNode(info, arguments, result, body);
     }
 
     static INode IfElse(ref ManualTokens toks, string Name="if")

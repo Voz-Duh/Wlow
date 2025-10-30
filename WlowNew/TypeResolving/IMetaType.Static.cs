@@ -9,23 +9,15 @@ public partial interface IMetaType
         Info info,
         T from,
         IMetaType to,
-        Func<T, IMetaType, IMetaType?> cast)
+        Func<T, IMetaType, IMetaType?> cast,
+        bool is_template = false,
+        bool repeat = false)
         where T : IMetaType
     {
+        IMetaType? result;
+
         if (to is PlaceHolderMetaType)
             return from;
-
-        try
-        {
-            return from.TemplateCast(ctx, info, to);
-        }
-        catch { }
-
-        try
-        {
-            return to.TemplateCast(ctx, info, from);
-        }
-        catch { }
 
         var wraped = to;
         ResolveMetaType? wraper = null;
@@ -34,7 +26,40 @@ public partial interface IMetaType
         if (wraped is ResolveMetaType)
             wraper = wraped.PreUnwrap(ctx);
 
-        IMetaType? result = cast(from, to) ?? throw CastError(info, from, to);
+        var binToBuilder = new BinaryTypeBuilder();
+        to.Binary(binToBuilder, info);
+        var binTo = binToBuilder.Done();
+
+        var binFromBuilder = new BinaryTypeBuilder();
+        from.Binary(binFromBuilder, info);
+        var binFrom = binFromBuilder.Done();
+
+        if (binFrom == binTo)
+        {
+            result = from;
+            goto PRC_RESULT;
+        }
+
+        if (!repeat)
+        {
+            if (!is_template)
+            {
+                try
+                {
+                    return from.TemplateCast(ctx, info, to, true);
+                }
+                catch { }
+            }
+
+            try
+            {
+                return to.TemplateCast(ctx, info, from, true);
+            }
+            catch { }
+        }
+
+        result = cast(from, to) ?? throw CastError(info, from, to);
+        PRC_RESULT:
         wraper?.Current = result;
 
         return result;
@@ -44,20 +69,20 @@ public partial interface IMetaType
         Info info,
         IMetaType from,
         IMetaType to)
-        => new(info, $"type {from.Name} cannot be casted to type {to.Name}");
+        => new(info, $"type {from} cannot be casted to type {to}");
 
     public static CompilationException OperateError(
         string operationName,
         Info info,
         IMetaType from,
         IMetaType to)
-        => new(info, $"{operationName} operator is not supported at type {from.Name} with type {to.Name}");
+        => new(info, $"{operationName} operator is not supported at type {from} with type {to}");
 
     public static CompilationException OperateError(
         string operationName,
         Info info,
         IMetaType type)
-        => new(info, $"{operationName} operator is not supported for type {type.Name}");
+        => new(info, $"{operationName} operator is not supported for type {type}");
 
     public static OperateChain<T> Operate<T>(Scope context, Info info, T left, IMetaType right)
         where T : IMetaType

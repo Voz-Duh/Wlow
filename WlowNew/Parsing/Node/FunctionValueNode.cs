@@ -7,15 +7,32 @@ namespace Wlow.Parsing;
 
 public readonly record struct FunctionValueNode(
     Info Info,
-    ImmutableArray<Pair<string, TypedValue>> Arguments,
-    INode Body) : INode, INodeTypeResolved
+    ImmutableArray<Pair<string, TypedValueAnnot>> Arguments,
+    TypeAnnot Result,
+    INode Body) : INode
+{
+    public INodeTypeResolved TypeResolve(Scope scope)
+    {
+        var declaration = new FunctionDeclaration(Info, Arguments, Result, Body);
+        return new FunctionValueResolvedNode(
+            declaration,
+            Arguments,
+            TypedValue.From(declaration.CreateType(scope)),
+            Body
+        );
+    }
+
+    public override string ToString() => $"(fn {string.Join(", ", Arguments.Select(v => $"{v.val.Mutability.GetString()} {v.id} {v.val.Type}"))} -> {Result} = {Body})";
+}
+
+public readonly record struct FunctionValueResolvedNode(
+    FunctionDeclaration declaration,
+    ImmutableArray<Pair<string, TypedValueAnnot>> Arguments,
+    TypedValue ValueTypeInfo,
+    INode Body) : INodeTypeResolved
 {
 
-    public readonly TypedValue ValueTypeInfo => new(TypeMutability.Const, Type);
-    public readonly FunctionDeclaration Declaration => Type.Declaration;
-    public readonly FunctionMetaType Type = new FunctionDeclaration(Info, Arguments, Body).CreateType();
     public INodeTypeResolved TypeFixation() => this;
-    public INodeTypeResolved TypeResolve(Scope scope) => this;
 
-    public override string ToString() => $"(fn {string.Join(", ", Arguments.Select(v => $"{v.val.Mutability.GetString()} {v.id} {v.val.Type.Name}"))} = {Body})";
+    public override string ToString() => $"(fn {string.Join(", ", Arguments.Select(v => $"{v.val.Mutability.GetString()} {v.id} {v.val.Type}"))} = {Body})";
 }

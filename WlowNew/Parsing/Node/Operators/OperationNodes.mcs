@@ -10,7 +10,6 @@
       var left = Left.TypeResolve(scope);
       var right = Right.TypeResolve(scope);
       var info = TypedValue.From(
-          scope,
           left.ValueTypeInfo.Type.Operation'c('name)(scope, Info, right.ValueTypeInfo.Type)
       );
 

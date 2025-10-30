@@ -13,7 +13,7 @@ public readonly record struct FailNode(Info Info, INode Value) : INode
 
         // value type must not be casted to toType,
         // toType used only to generate new error of correct type! 
-        return new FailNodeTypeResolved(Info, TypedValue.From(scope, NeverMetaType.Get), value, toType);
+        return new FailNodeTypeResolved(Info, TypedValue.From(NeverMetaType.Get), value, toType);
     }
 
     public override string ToString() => $"fail ({Value})";

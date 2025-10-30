@@ -10,10 +10,13 @@ public readonly record struct TypedValue(TypeMutability Mutability, IMetaType Ty
     public TypedValue Fixate()
         => new(Mutability, Type.Fixate());
 
-    public TypedValue TemplateCast(Scope ctx, Info info, IMetaType to)
-        => new(Mutability, Type.TemplateCast(ctx, info, to));
+    public TypedValue Unweak()
+        => new(Mutability, Type.Unweak());
 
-    public override string ToString() => $"{Mutability.GetString()}{Type.Name}";
+    public TypedValue TemplateCast(Scope ctx, Info info, IMetaType to, bool repeat)
+        => new(Mutability, Type.TemplateCast(ctx, info, to, repeat));
 
-    public static TypedValue From(Scope ctx, IMetaType Type) => new(Type.Mutability(ctx), Type);
+    public override string ToString() => $"{Mutability.GetString()}{Type}";
+
+    public static TypedValue From(IMetaType Type) => new(Type.Mutability, Type);
 }

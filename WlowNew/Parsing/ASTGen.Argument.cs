@@ -5,7 +5,7 @@ namespace Wlow.Parsing;
 
 public partial class ASTGen
 {
-    static Pair<string, TypedValue> Argument(Token ctx, ReadOnlySpan<Token> inner)
+    static Pair<string, TypedValueAnnot> Argument(Token ctx, ReadOnlySpan<Token> inner)
         => ManualTokens.Create(ctx, inner).Start(
             OnEmpty: (ref _, tok) => throw CompilationException.Create(tok.info, "function argument is cannot be empty"),
             Do: (ref toks) =>
@@ -28,9 +28,9 @@ public partial class ASTGen
 
                 var type = Type(name, ref toks, optional: true);
 
-                toks.Done(Fail: (tok) => throw CompilationException.Create(tok.info, "function argument was done, did you missed comma?"));
+                toks.Done(Fail: tok => throw CompilationException.Create(tok.info, "function argument was done, did you missed comma?"));
 
-                return Pair.From(name.value, new TypedValue(mutability, type));
+                return Pair.From(name.value, new TypedValueAnnot(mutability, type));
             }
         );
 }

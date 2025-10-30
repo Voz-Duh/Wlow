@@ -1,13 +1,22 @@
-~include(errorer.mcs.api)
+~define('op(type, name):
+  public IMetaType Operation'c('name)(Scope ctx, Info info
+    ~ifeq('type:bin)
+      , IMetaType right
+    ~endif
+    )
+    => Current = Current.Operation'c('name)(ctx, info
+    ~ifeq('type:bin)
+      , right
+    ~endif
+    );
+)
 
 using Wlow.Shared;
 
 namespace Wlow.TypeResolving;
 
-public readonly partial struct VoidMetaType
+public partial class WeakRefMetaType
 {
-  'err_cast
-  
   'op(bin, Equals)
   'op(bin, NotEquals)
   'op(bin, Lower)

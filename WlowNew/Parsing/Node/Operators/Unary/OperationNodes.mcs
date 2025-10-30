@@ -7,7 +7,7 @@
     public INodeTypeResolved TypeResolve(Scope scope)
     {
       var value = Value.TypeResolve(scope);
-      var info = TypedValue.From(scope, value.ValueTypeInfo.Type.Operation'c('name)(scope, Info));
+      var info = TypedValue.From(value.ValueTypeInfo.Type.Operation'c('name)(scope, Info));
 
       return new 'c('name)NodeTypeResolved(Info, info, value);
     }

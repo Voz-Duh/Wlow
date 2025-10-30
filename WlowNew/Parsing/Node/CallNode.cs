@@ -26,11 +26,11 @@ public readonly record struct CallNode(
 public readonly record struct CallNodeTypeResolved(
     Info Info,
     TypedValue ValueTypeInfo,
-    FunctionDefinition Definition,
+    IFunctionDefinition Definition,
     INodeTypeResolved Value,
     ImmutableArray<INodeTypeResolved> Arguments) : INodeTypeResolved
 {
     public INodeTypeResolved TypeFixation()
         => new CallNodeTypeResolved(Info, ValueTypeInfo.Fixate(), Definition, Value.TypeFixation(), [.. from v in Arguments select v.TypeFixation()]);
-    public override string ToString() => $"--: {ValueTypeInfo.Type.Name} -- {Definition.Type.Name} = {Definition.Node} :-- ({Value}' {string.Join(", ", Arguments)})";
+    public override string ToString() => $"--: {ValueTypeInfo.Type} -- {Definition.Type} = {Definition.BumpNode} :-- ({Value}' {string.Join(", ", Arguments)})";
 }

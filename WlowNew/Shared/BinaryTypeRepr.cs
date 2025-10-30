@@ -4,7 +4,7 @@ public enum BinaryTypeRepr
 {
     None,
     Never, Void,
-    TypeOf,
+    NotType,
     PlaceHolder, Unknown,
     FunctionStart, FunctionEnd,
     TupleStart, TupleEnd,

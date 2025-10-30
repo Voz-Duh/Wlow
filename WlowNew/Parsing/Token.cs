@@ -4,50 +4,6 @@ using Wlow.Shared;
 
 namespace Wlow.Parsing;
 
-public enum TokenType
-{
-    NaT,
-    Comment, CommentEnd, Ignore,
-    Bracket, BracketEnd,
-    Figure, FigureEnd,
-    NotEquals, Equals,
-    Call,
-    ContinueDelimiter, Delimiter,
-    Comma,
-    SetAdd, SetSub,
-    SetMul, SetDiv,
-    SetMod, SetXor,
-    SetRor, SetRol,
-    SetShr, SetShl,
-    SetBitwiseOr, SetBitwiseAnd,
-    Cast,
-    Ror, Rol,
-    Shr, Shl,
-    LowerEquals, GreaterEquals,
-    Lower, Greater,
-    Set,
-    LDNum, INum, UNum, FNum,
-    Dot, Not,
-    Mul, Div,
-    Add, Sub,
-    Mod, Xor,
-    LogicalOr,
-    LogicalAnd,
-    BitwiseOr,
-    BitwiseAnd,
-    PlaceHolder,
-    Int8, Int16, Int32, Int64,
-    Fail,
-    Let, Mut,
-    Type, Function,
-    In,
-    If, Elif, Else,
-    Packed,
-    Ident,
-    Newline,
-    Error
-}
-
 public readonly partial record struct Token(Info info, TokenType type, string value = null!, Token[] inner = null!)
 {
     private Token WithType(TokenType type)
@@ -55,81 +11,6 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 
     public override string ToString() => $"{{({info.Line}:{info.Column}) : {type} = \"{value ?? string.Join(", ", inner)}}}\"";
 
-    [GeneratedRegex(
-@"
- (--:) (?# multiline comment )
-|(:--) (?# multiline comment end )
-|( (?# ignore )
- [\t\x20]+ (?# ignore spaces )
-|--[^\n]* (?# ignore line comments )
-)
-|(\() (?# bracket )
-|(\)) (?# bracket end )
-|(\{) (?# figure )
-|(\}) (?# figure end )
-|(!=) (?# not equals )
-|(==) (?# equals )
-|(')  (?# call )
-|(;;) (?# continue delimiter )
-|(;)  (?# delimiter )
-|(,)  (?# comma )
-|(\+=)  (?# set add )
-|(-=)   (?# set sub )
-|(\*=)  (?# set mul )
-|(\/=)  (?# set div )
-|(%=)   (?# set mod )
-|(\^=)  (?# set xor )
-|(>>>=) (?# set ror )
-|(<<<=) (?# set rol )
-|(>>=)  (?# set shr )
-|(<<=)  (?# set shl )
-|(\|=)  (?# set bitwise or )
-|(&=)   (?# set bitwise and )
-|(->) (?# cast )
-|(>>>)  (?# ror )
-|(<<<)  (?# rol )
-|(>>)   (?# shr )
-|(<<)   (?# shl )
-|(<=) (?# lower equals )
-|(>=) (?# greater equals )
-|(<)  (?# lower )
-|(>)  (?# greater )
-|(=)  (?# set )
-(?# nums )
-|(\.\d+)|(-\d+)|(\d+)|(\d+.\d*)
-|(\.)   (?# dot )
-|(\!)   (?# not )
-|(\*)   (?# mul )
-|(\\)   (?# div )
-|(\+)   (?# add )
-|(\-)   (?# sub )
-|(\%)   (?# mod )
-|(\~)   (?# xor )
-|(\|\|) (?# logical or )
-|(\&\&) (?# logical and )
-|(\|) (?# bitwise or )
-|(\&) (?# bitwise and )
-|(\?) (?# place holder )
-|(\bi8\b)     (?# i8 )
-|(\bi16\b)    (?# i16 )
-|(\bi32\b)    (?# i32 )
-|(\bi64\b)    (?# i64 )
-|(\bfail\b)   (?# fail )
-|(\blet\b)    (?# let )
-|(\bmut\b)    (?# mut )
-|(\btype\b)   (?# type )
-|(\bfn\b)     (?# function )
-|(\bin\b)     (?# in )
-|(\bif\b)     (?# if )
-|(\belif\b)   (?# elif )
-|(\belse\b)   (?# else )
-|(\bpacked\b) (?# packed )
-|(\b[\p{L}_][\p{L}\p{Nd}_]*\b) (?# ident )
-|(\r?\n) (?# new line )
-|(.)     (?# error )
-", RegexOptions.Multiline | RegexOptions.IgnorePatternWhitespace)]
-    private static partial Regex Regex();
-    private readonly static Regex regex = Regex();
     private readonly static (TokenType start, TokenType end, string name, string start_str, string end_str, bool add)[] GroupTokens = [
         (
             TokenType.Bracket,
@@ -172,7 +53,7 @@ public readonly partial record struct Token(Info info, TokenType type, string va
 
         NewLineText();
         
-        foreach (Match m in regex.Matches(text))
+        foreach (Match m in TokensRegex.Instance.Matches(text))
         {
             start = m.Index;
             var info = new Info(start - linestart + 1, line, lineText);

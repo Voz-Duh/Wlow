@@ -88,7 +88,7 @@ Handling operators:
 
 Ternary operators:
     if a = b else = c
-    on name_b in a = b else name_c = c
+    maybe: on name_b in a = b else name_c = c
 
 Precedence      Operator
     7           Unary operators
@@ -97,7 +97,7 @@ Precedence      Operator
     4           ==  !=  <   >  <=  >=
     3           &&
     2           ||
-    1           if  on
+    1           if
 */
     
     public static INode Expression(ImmutableArray<Token> Tokens)

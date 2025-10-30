@@ -6,20 +6,22 @@ public readonly partial struct PlaceHolderMetaType : IMetaType
 {
     public readonly static PlaceHolderMetaType Get = new();
 
-    public string Name => "?";
-    public TypeMutability Mutability(Scope ctx) => TypeMutability.PlaceHolder;
-    public Flg<TypeConvention> Convention(Scope ctx) => TypeConvention.Any;
+    public override string ToString() => "?";
+    public bool IsKnown => false;
+    public Opt<uint> ByteSize => Opt<uint>.Hasnt();
+    public TypeMutability Mutability => TypeMutability.PlaceHolder;
+    public Flg<TypeConvention> Convention => TypeConvention.Any;
 
-    public Nothing Binary(BinaryTypeBuilder bin)
+    public Nothing Binary(BinaryTypeBuilder bin, Info info)
         => bin.Push((byte)BinaryTypeRepr.PlaceHolder);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)
-        => throw new NotSupportedException("NNE: place holder using error");
+        => to;
 
     public IMetaType ImplicitCast(Scope ctx, Info info, IMetaType to)
-        => throw new NotSupportedException("NNE: place holder using error");
+        => to;
 
-    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
+    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to, bool repeat)
         => to;
 
     public IMetaType OperationRef(Scope _, Info __) => this;

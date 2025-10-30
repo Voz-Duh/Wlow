@@ -1,6 +1,7 @@
-using Wlow.TypeResolving;
 
-namespace Wlow.Shared;
+using Wlow.Shared;
+
+namespace Wlow.TypeResolving;
 
 public enum VariableAbility
 {
@@ -39,14 +40,14 @@ public readonly struct Scope
         else
         {
             Variables = variables;
-            ErrorTypeTo = new();
+            ErrorTypeTo = ResolveMetaType.Create();
             ErrorScope = Mut.From(false);
         }
     }
 
     Scope(Dictionary<string, Variable> variables, Mut<bool> errorScope) : this(variables)
         => ErrorScope = errorScope;
-    
+
     public static Scope Create() => new([]);
 
     public void FinalizeErrorType(IMetaType type)
@@ -58,12 +59,18 @@ public readonly struct Scope
         return ErrorTypeTo;
     }
 
-    public TypedValue CreateVariable(Info info, TypeMutability mutability, string name, IMetaType type)
-    {
-        if (!type.Convention(this) << TypeConvention.InitVariable)
-            throw CompilationException.Create(info, $"type {type.Name} is not suitable to be a variable type");
+    public TypedValue CreateArgument(Info info, TypeMutability mutability, string name, IMetaType type)
+        => CreateConventionalVariable(info, VariableAbility.StoreRead, mutability, name, type);
 
-        var res = new Variable(VariableAbility.Full, new(mutability, type));
+    public TypedValue CreateVariable(Info info, TypeMutability mutability, string name, IMetaType type)
+        => CreateConventionalVariable(info, VariableAbility.Full, mutability, name, type);
+
+    TypedValue CreateConventionalVariable(Info info, VariableAbility ability, TypeMutability mutability, string name, IMetaType type)
+    {
+        if (!type.Convention << TypeConvention.InitVariable)
+            throw CompilationException.Create(info, $"type {type} is not suitable to be a variable type");
+
+        var res = new Variable(ability, new(mutability, type));
         if (!Variables.TryAdd(name, res))
         {
             throw CompilationException.Create(info, $"variable {name} is already defined");

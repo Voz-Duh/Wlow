@@ -6,6 +6,8 @@ namespace Wlow.TypeResolving;
 
 public readonly partial struct NeverMetaType
 {
+  'err_cast
+
   'op(bin, Equals)
   'op(bin, NotEquals)
   'op(bin, Lower)

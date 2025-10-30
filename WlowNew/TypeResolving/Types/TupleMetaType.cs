@@ -14,27 +14,29 @@ namespace Wlow.TypeResolving;
 
 public readonly partial record struct TupleMetaType : IMetaType
 {
+    readonly bool Fixated;
     public readonly TupleBase Base;
 
-    TupleMetaType(TupleBase @base) => Base = @base;
-    
-    public static TupleMetaType Create(Scope ctx, ImmutableArray<IMetaType> types)
+    TupleMetaType(TupleBase @base, bool fixated = false)
     {
-        if (types.Length <= 1)
-            throw new ArgumentException("Tuple must have at least two types", nameof(types));
-
+        Base = @base;
+        Fixated = fixated;
+    }
+    
+    public static TupleMetaType Create(Info info, Scope ctx, ImmutableArray<IMetaType> types)
+    {
         // check for callable
         if (types[0].Callable(ctx))
             return new((types[0], types[1..]));
 
         var builder = new BinaryTypeBuilder();
-        var keybin = types[0].Binary(builder).Of(builder).Done();
+        var keybin = types[0].Binary(builder, info).Of(builder).Done();
 
         // check for homogeneous
         if (types.All(v =>
         {
             var builder = new BinaryTypeBuilder();
-            var bin = types[0].Binary(builder).Of(builder).Done();
+            var bin = types[0].Binary(builder, info).Of(builder).Done();
             return bin == keybin;
         })) return new((types.Length, types[0]));
 
@@ -44,18 +46,30 @@ public readonly partial record struct TupleMetaType : IMetaType
     public static TupleMetaType CreateHomogeneous(int count, IMetaType type)
         => new((count, type));
 
-    public string Name
+    public override string ToString()
         => Base.Unwrap(
-            basic => $"({string.Join(", ", basic.Select(v => v.Name))})",
-            homogeneous => $"({homogeneous.Count} {homogeneous.Type.Name})",
-            callable => $"({string.Join(", ", [callable.Function.Name, .. callable.Args.Select(v => v.Name)])})"
+            basic => $"({string.Join(", ", basic)})",
+            homogeneous => $"({homogeneous.Count} {homogeneous.Type})",
+            callable => $"({callable.Function}, {string.Join(", ", callable.Args)})"
         );
-    public TypeMutability Mutability(Scope ctx) => TypeMutability.Copy;
-    public Flg<TypeConvention> Convention(Scope ctx)
+    public bool IsKnown
         => Base.Unwrap(
-            basic => basic.Aggregate(Flg.From(TypeConvention.Any), (pre, cur) => pre & cur.Convention(ctx)),
-            homogeneous => homogeneous.Type.Convention(ctx),
-            callable => callable.Args.Aggregate(callable.Function.Convention(ctx), (pre, cur) => pre & cur.Convention(ctx))
+            basic => basic.All(v => v.IsKnown),
+            homogeneous => homogeneous.Type.IsKnown,
+            callable => callable.Function.IsKnown && callable.Args.All(v => v.IsKnown)
+        );
+    public Opt<uint> ByteSize
+        => Base.Unwrap(
+            basic => basic.Aggregate(0u, (pre, val) => pre + val.ByteSize),
+            homogeneous => (uint)homogeneous.Count * homogeneous.Type.ByteSize,
+            callable => callable.Function.ByteSize + callable.Args.Aggregate(0u, (pre, val) => pre + val.ByteSize)
+        );
+    public TypeMutability Mutability => TypeMutability.Copy;
+    public Flg<TypeConvention> Convention
+        => Base.Unwrap(
+            basic => basic.Aggregate(Flg.From(TypeConvention.Any), (pre, cur) => pre & cur.Convention),
+            homogeneous => homogeneous.Type.Convention,
+            callable => callable.Args.Aggregate(callable.Function.Convention, (pre, cur) => pre & cur.Convention)
         );
 
     public int Count
@@ -64,11 +78,23 @@ public readonly partial record struct TupleMetaType : IMetaType
             homogeneous => homogeneous.Count,
             callable => callable.Args.Length + 1 // +1 for the function itself
         );
+    
+    public IMetaType? UnwrapFn()
+        => Fixated
+        ? null
+        : new TupleMetaType(
+            Base.Unwrap<TupleBase>(
+                basic => basic.Select(v => v.Unwrap()).ToImmutableArray(),
+                homogeneous => (homogeneous.Count, homogeneous.Type.Unwrap()),
+                callable => (callable.Function.Unwrap(), callable.Args.Select(v => v.Unwrap()).ToImmutableArray())
+            ),
+            true
+        );
 
-    public IMetaType AccessIndex(Info info, int index)
+    public IMetaType AccessIndex(Scope ctx, Info info, int index)
     {
         if (index >= Count)
-            throw CompilationException.Create(info, $"tuple index {index} is out of range of {Name}");
+            throw CompilationException.Create(info, $"tuple index {index} is out of range of {this}");
 
         return Base.Unwrap(
             basic => basic[index],
@@ -81,16 +107,16 @@ public readonly partial record struct TupleMetaType : IMetaType
     {
         var self = this;
         return Base.Unwrap(
-            basic => throw CompilationExceptionList.NoIndexAddressation(info, self.Name),
+            basic => throw CompilationExceptionList.NoIndexAddressation(info, self.ToString()),
             homogeneous => homogeneous.Type,
-            callable => throw CompilationExceptionList.NoIndexAddressation(info, self.Name)
+            callable => throw CompilationExceptionList.NoIndexAddressation(info, self.ToString())
         );
     }
 
     public IMetaType AccessName(Scope ctx, Info info, string name)
         => name switch {
             "len" => IntMetaType.Get32,
-            _ => throw CompilationExceptionList.NoFieldSupport(info, Name, name)
+            _ => throw CompilationExceptionList.NoFieldSupport(info, ToString(), name)
         };
 
     public bool Callable => Base.Unwrap(
@@ -99,35 +125,35 @@ public readonly partial record struct TupleMetaType : IMetaType
         callable => true
     );
 
-    public FunctionDefinition Call(Scope ctx, Info info, ImmutableArray<(Info Info, TypedValue Value)> args)
+    public IFunctionDefinition Call(Scope ctx, Info info, ImmutableArray<(Info Info, TypedValue Value)> args)
     {
         var self = this;
         return Base.Unwrap(
-            basic => throw CompilationExceptionList.Uncallable(info, self.Name),
-            homogeneous => throw CompilationExceptionList.Uncallable(info, self.Name),
-            callable => callable.Function.Call(ctx, info, [.. callable.Args.Select(v => (info, TypedValue.From(ctx, v))), .. args])
+            basic => throw CompilationExceptionList.Uncallable(info, self.ToString()),
+            homogeneous => throw CompilationExceptionList.Uncallable(info, self.ToString()),
+            callable => callable.Function.Call(ctx, info, [.. callable.Args.Select(v => (info, TypedValue.From(v))), .. args])
         );
     }
 
-    public Nothing Binary(BinaryTypeBuilder bin) =>
+    public Nothing Binary(BinaryTypeBuilder bin, Info info) =>
         bin.Push(BinaryTypeRepr.TupleStart)
         .Of(Base).Unwrap(
-            basic => basic.Select(v => v.Binary(bin)).Ignore(),
+            basic => basic.Select(v => v.Binary(bin, info)).Ignore(),
             homogeneous =>
                 homogeneous.Count == -1
-                ? bin.Push(BinaryTypeRepr.Unknown).Of(homogeneous.Type).Binary(bin)
-                : homogeneous.Count.Repeat(_ => homogeneous.Type.Binary(bin)),
-            callable => callable.Function.Binary(bin).Effect(callable.Args.Select(v => v.Binary(bin)))
+                ? bin.Push(BinaryTypeRepr.Unknown).Of(homogeneous.Type).Binary(bin, info)
+                : homogeneous.Count.Repeat(_ => homogeneous.Type.Binary(bin, info)),
+            callable => callable.Function.Binary(bin, info).Effect(callable.Args.Select(v => v.Binary(bin, info)))
         )
         .Of(bin).Push(BinaryTypeRepr.TupleEnd);
 
     public IMetaType ExplicitCast(Scope ctx, Info info, IMetaType to)
-        => ImplicitCast(ctx, info, to);
+        => TemplateCast(ctx, info, to, false);
 
     public IMetaType ImplicitCast(Scope ctx, Info info, IMetaType to)
-        => TemplateCast(ctx, info, to);
+        => TemplateCast(ctx, info, to, false);
 
-    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to)
+    public IMetaType TemplateCast(Scope ctx, Info info, IMetaType to, bool repeat)
         => IMetaType.SmartTypeSelect(
             ctx, info,
             this, to,
@@ -197,6 +223,18 @@ public readonly partial record struct TupleMetaType : IMetaType
                     );
 
                 return new TupleMetaType(newBase);
-            }
+            },
+            is_template: true,
+            repeat: repeat
         );
+
+    // public IFixType Fixed()
+    // {
+    //     var self = this;
+    //     return Base.Unwrap(
+    //         basic => new BasicTupleFixType([.. basic.Select(v => v.Fixate())]),
+    //         homogeneous => new HomoTupleFixType(homogeneous.Count, homogeneous.Type.Fixate()),
+    //         callable => new CallableTupleFixType(callable.Function.Fixate(), [.. callable.Args.Select(v => v.Fixate())])
+    //     );
+    // }
 }
